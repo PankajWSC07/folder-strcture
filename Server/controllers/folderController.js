@@ -1,0 +1,638 @@
+const { pool } = require("../config/db");
+
+const VALID_EXTENSIONS = {
+  // Programming Languages
+  ".js": "JavaScript",
+  ".ts": "TypeScript",
+  ".tsx": "TypeScript React",
+  ".jsx": "JavaScript React",
+  ".py": "Python",
+  ".java": "Java",
+  ".cpp": "C++",
+  ".c": "C",
+  ".cs": "C#",
+  ".rb": "Ruby",
+  ".go": "Go",
+  ".rs": "Rust",
+  ".php": "PHP",
+  ".swift": "Swift",
+  ".kt": "Kotlin",
+  ".scala": "Scala",
+  ".r": "R",
+  ".lua": "Lua",
+  ".pl": "Perl",
+  ".sh": "Shell Script",
+  ".bash": "Bash",
+  ".groovy": "Groovy",
+  ".gradle": "Gradle",
+  ".m": "Objective-C",
+  ".mm": "Objective-C++",
+  ".h": "C Header",
+  ".hpp": "C++ Header",
+  ".vb": "Visual Basic",
+  ".vbs": "VBScript",
+  ".ps1": "PowerShell",
+  ".asm": "Assembly",
+  ".clj": "Clojure",
+  ".cljs": "ClojureScript",
+  ".ex": "Elixir",
+  ".exs": "Elixir Script",
+  ".erl": "Erlang",
+  ".hrl": "Erlang Header",
+  ".fs": "F#",
+  ".fsx": "F# Script",
+  ".fsi": "F# Interface",
+  ".ml": "OCaml",
+  ".mli": "OCaml Interface",
+  ".hs": "Haskell",
+  ".lhs": "Literate Haskell",
+  ".jl": "Julia",
+  ".nim": "Nim",
+  ".nims": "Nim Script",
+  ".d": "D Language",
+  ".dart": "Dart",
+  ".pas": "Pascal",
+  ".pp": "Pascal",
+  ".s": "Assembly",
+
+  // Markup & Web
+  ".html": "HTML",
+  ".htm": "HTML",
+  ".xml": "XML",
+  ".xhtml": "XHTML",
+  ".css": "CSS",
+  ".scss": "SCSS",
+  ".sass": "SASS",
+  ".less": "LESS",
+  ".json": "JSON",
+  ".jsonc": "JSON with Comments",
+  ".yaml": "YAML",
+  ".yml": "YAML",
+  ".toml": "TOML",
+  ".ini": "INI",
+  ".cfg": "Configuration",
+  ".conf": "Configuration",
+  ".config": "Configuration",
+  ".properties": "Properties",
+
+  // Documents & Text
+  ".pdf": "PDF",
+  ".txt": "Plain Text",
+  ".md": "Markdown",
+  ".markdown": "Markdown",
+  ".rst": "reStructuredText",
+  ".tex": "LaTeX",
+  ".doc": "Word Document",
+  ".docx": "Word Document",
+  ".odt": "OpenDocument Text",
+  ".rtf": "Rich Text Format",
+  ".csv": "CSV",
+  ".tsv": "TSV",
+  ".xlsx": "Excel Spreadsheet",
+  ".xls": "Excel Spreadsheet",
+  ".ods": "OpenDocument Spreadsheet",
+
+  // Images
+  ".jpg": "JPEG Image",
+  ".jpeg": "JPEG Image",
+  ".png": "PNG Image",
+  ".gif": "GIF Image",
+  ".svg": "SVG Image",
+  ".ico": "Icon",
+  ".webp": "WebP Image",
+  ".bmp": "Bitmap Image",
+  ".tiff": "TIFF Image",
+  ".tif": "TIFF Image",
+  ".psd": "Photoshop",
+  ".ai": "Adobe Illustrator",
+
+  // Archives & Compression
+  ".zip": "ZIP Archive",
+  ".rar": "RAR Archive",
+  ".7z": "7-Zip Archive",
+  ".tar": "TAR Archive",
+  ".gz": "GZIP Archive",
+  ".tar.gz": "TAR GZIP Archive",
+  ".bz2": "BZIP2 Archive",
+  ".xz": "XZ Archive",
+
+  // Data & Database
+  ".sql": "SQL Script",
+  ".db": "Database",
+  ".sqlite": "SQLite Database",
+  ".sqlite3": "SQLite Database",
+  ".mdb": "Microsoft Access",
+
+  // Other Common Files
+  ".env": "Environment Variables",
+  ".gitignore": "Git Ignore",
+  ".gitattributes": "Git Attributes",
+  ".editorconfig": "Editor Config",
+  ".eslintrc": "ESLint Config",
+  ".prettierrc": "Prettier Config",
+  ".babelrc": "Babel Config",
+  ".npmrc": "NPM Config",
+  ".yarnrc": "Yarn Config",
+  ".log": "Log File",
+  ".lock": "Lock File",
+  ".map": "Source Map",
+  ".min.js": "Minified JavaScript",
+  ".min.css": "Minified CSS",
+};
+
+const validateFileExtension = (filename) => {
+  const ext = filename.substring(filename.lastIndexOf(".")).toLowerCase();
+  return VALID_EXTENSIONS.hasOwnProperty(ext) ? ext : null;
+};
+
+exports.createItem = async (req, res) => {
+  try {
+    const { name, type, parentId } = req.body;
+    const userId = req.userId;
+
+    console.log("Creating item - Request data:", {
+      name,
+      type,
+      parentId,
+      userId,
+    });
+
+    if (!name || !type || !["folder", "file"].includes(type)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid input. Name and type are required." });
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+      let extension = null;
+      if (type === "file") {
+        extension = validateFileExtension(name);
+        if (!extension) {
+          const supportedExts = Object.keys(VALID_EXTENSIONS)
+            .slice(0, 10)
+            .join(", ");
+          return res.status(400).json({
+            message: `Invalid file extension. Examples: ${supportedExts}...`,
+          });
+        }
+      }
+
+      if (parentId) {
+        const [ownFolders] = await connection.execute(
+          "SELECT id, type, userId FROM Items WHERE id = ? AND userId = ? AND type = ?",
+          [parentId, userId, "folder"],
+        );
+
+        if (ownFolders.length > 0) {
+          const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+          const [result] = await connection.execute(
+            "INSERT INTO Items (name, type, userId, parentId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [name, type, userId, parentId || null, extension, now, now],
+          );
+
+          return res.status(201).json({
+            message: `${type === "folder" ? "Folder" : "File"} created successfully`,
+            item: {
+              id: result.insertId,
+              name,
+              type,
+              userId,
+              parentId: parentId || null,
+              extension,
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+
+        const [sharedFolder] = await connection.execute(
+          `SELECT i.id, i.type, i.userId 
+           FROM Items i
+           INNER JOIN Permissions p ON i.id = p.itemId
+           WHERE i.id = ? AND p.userId = ? AND p.can_create = true AND i.type = ?`,
+          [parentId, userId, "folder"],
+        );
+
+        if (sharedFolder.length === 0) {
+          return res.status(403).json({
+            message:
+              "You do not have permission to create items in this folder",
+          });
+        }
+      }
+
+      const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+      const [result] = await connection.execute(
+        "INSERT INTO Items (name, type, userId, parentId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [name, type, userId, parentId || null, extension, now, now],
+      );
+
+      const newItemId = result.insertId;
+
+      if (parentId) {
+        const [parentItem] = await connection.execute(
+          "SELECT userId FROM Items WHERE id = ?",
+          [parentId],
+        );
+
+        if (parentItem.length > 0 && parentItem[0].userId !== userId) {
+          console.log(
+            ` [createItem] Auto-granting parent owner (${parentItem[0].userId}) permissions to new ${type} (${newItemId})`,
+          );
+          await connection.execute(
+            `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
+             VALUES (?, ?, true, true, true, true, true)
+             ON DUPLICATE KEY UPDATE can_view=true, can_create=true, can_upload=true, can_edit=true, can_delete=true`,
+            [newItemId, parentItem[0].userId],
+          );
+        }
+      }
+
+      res.status(201).json({
+        message: `${type === "folder" ? "Folder" : "File"} created successfully`,
+        item: {
+          id: newItemId,
+          name,
+          type,
+          userId,
+          parentId: parentId || null,
+          extension,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error creating item:", error);
+    res.status(500).json({ message: "Error creating item" });
+  }
+};
+
+exports.getFolderStructure = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const connection = await pool.getConnection();
+
+    try {
+      console.log(
+        ` [getFolderStructure] Fetching structure for user ${userId}`,
+      );
+
+      const query = `
+        SELECT id, name, type, parentId, extension, createdAt, userId, 
+        NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
+        FROM Items
+        WHERE parentId IS NULL AND (
+          userId = ? 
+          OR id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
+        )
+        
+        UNION ALL
+        
+        SELECT id, name, 'file' as type, parentId, NULL as extension, createdAt, userId,
+        filePath, originalName, size, mimeType
+        FROM Files
+        WHERE parentId IS NULL AND (
+          userId = ?
+          OR id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
+        )
+        
+        ORDER BY type DESC, name ASC
+      `;
+
+      const [items] = await connection.execute(query, [
+        userId,
+        userId,
+        userId,
+        userId,
+      ]);
+
+      console.log(
+        ` [getFolderStructure] Returning ${items.length} root items for user ${userId}`,
+      );
+
+      res.status(200).json({
+        message: "Folder structure retrieved successfully",
+        data: items,
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error fetching folder structure:", error);
+    res.status(500).json({ message: "Error fetching folder structure" });
+  }
+};
+
+exports.getItemsByParent = async (req, res) => {
+  try {
+    const { parentId } = req.params;
+    const userId = req.userId;
+
+    const connection = await pool.getConnection();
+
+    try {
+      if (!parentId || parentId === "null") {
+        console.log(
+          ` [getItemsByParent] Getting root items for user ${userId}`,
+        );
+
+        const [rootItems] = await connection.execute(
+          `
+          SELECT id, name, type, parentId, extension, createdAt, userId,
+          NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
+          FROM Items
+          WHERE parentId IS NULL AND (
+            userId = ? OR id IN (
+              SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1
+            )
+          )
+          ORDER BY type DESC, name ASC
+          `,
+          [userId, userId],
+        );
+
+        const [rootFiles] = await connection.execute(
+          `
+          SELECT id, name, 'file' as type, parentId,
+          NULL as extension, createdAt, userId,
+          filePath, originalName, size, mimeType
+          FROM Files
+          WHERE parentId IS NULL AND (
+            userId = ? OR parentId IN (
+              SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1
+            )
+          )
+          ORDER BY name ASC
+          `,
+          [userId, userId],
+        );
+
+        const data = [...rootItems, ...rootFiles];
+
+        return res.status(200).json({
+          message: "Root items retrieved successfully",
+          data,
+        });
+      }
+
+      const accessQuery = `
+      WITH RECURSIVE folder_path AS (
+          SELECT id, parentId, userId
+          FROM Items
+          WHERE id = ?
+
+          UNION ALL
+
+          SELECT i.id, i.parentId, i.userId
+          FROM Items i
+          INNER JOIN folder_path fp ON fp.parentId = i.id
+      )
+
+      SELECT COUNT(*) as hasAccess
+      FROM folder_path fp
+      LEFT JOIN Permissions p 
+          ON p.itemId = fp.id 
+          AND p.userId = ?
+          AND p.can_view = 1
+      WHERE 
+          fp.userId = ?  -- owner
+          OR p.itemId IS NOT NULL
+      LIMIT 1;
+      `;
+
+      const [accessResult] = await connection.execute(accessQuery, [
+        parentId,
+        userId,
+        userId,
+      ]);
+
+      if (accessResult[0].hasAccess === 0) {
+        return res.status(403).json({
+          message: "Access denied to this folder",
+        });
+      }
+
+      const [items] = await connection.execute(
+        `
+        SELECT id, name, type, parentId, extension, createdAt, userId,
+        NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
+        FROM Items
+        WHERE parentId = ?
+        ORDER BY type DESC, name ASC
+        `,
+        [parentId],
+      );
+
+      const [files] = await connection.execute(
+        `
+        SELECT id, name, 'file' as type, parentId,
+        NULL as extension, createdAt, userId,
+        filePath, originalName, size, mimeType
+        FROM Files
+        WHERE parentId = ?
+        ORDER BY name ASC
+        `,
+        [parentId],
+      );
+
+      const data = [...items, ...files].sort((a, b) => {
+        if (a.type === b.type) {
+          return a.name.localeCompare(b.name);
+        }
+        return a.type === "folder" ? -1 : 1;
+      });
+
+      res.status(200).json({
+        message: "Items retrieved successfully",
+        data,
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error fetching items:", error);
+    res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const path = require("path");
+const fs = require("fs");
+
+exports.deleteItem = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const userId = req.userId;
+    const connection = await pool.getConnection();
+
+    try {
+      const [items] = await connection.execute(
+        `SELECT i.id, i.type, i.userId FROM Items i
+         WHERE i.id = ? AND (i.userId = ? OR i.id IN (
+           SELECT itemId FROM Permissions WHERE userId = ? AND can_delete = 1
+         ))`,
+        [itemId, userId, userId],
+      );
+
+      if (items.length === 0) {
+        console.log(
+          ` [deleteItem] User ${userId} not authorized to delete item ${itemId}`,
+        );
+        return res
+          .status(403)
+          .json({ message: "Item not found or unauthorized" });
+      }
+
+      console.log(` [deleteItem] Deleting item ${itemId} by user ${userId}`);
+
+      const item = items[0];
+      // const isOwner = item.userId === userId;
+
+      if (item.type === "folder") {
+        const deleteChildren = async (parentId) => {
+          const [children] = await connection.execute(
+            "SELECT id, type FROM Items WHERE parentId = ?",
+            [parentId],
+          );
+
+          for (const child of children) {
+            if (child.type === "folder") {
+              await deleteChildren(child.id);
+            }
+            await connection.execute("DELETE FROM Items WHERE id = ?", [
+              child.id,
+            ]);
+          }
+
+          const [uploadedFiles] = await connection.execute(
+            "SELECT filePath FROM Files WHERE parentId = ?",
+            [parentId],
+          );
+
+          for (const file of uploadedFiles) {
+            const uploadsDir = path.join(__dirname, "../Uploads");
+            const filePath = path.join(
+              uploadsDir,
+              path.basename(file.filePath),
+            );
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          }
+
+          await connection.execute("DELETE FROM Files WHERE parentId = ?", [
+            parentId,
+          ]);
+        };
+
+        await deleteChildren(itemId);
+
+        const [directFiles] = await connection.execute(
+          "SELECT filePath FROM Files WHERE parentId = ?",
+          [itemId],
+        );
+
+        for (const file of directFiles) {
+          const uploadsDir = path.join(__dirname, "../Uploads");
+          const filePath = path.join(uploadsDir, path.basename(file.filePath));
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+
+        await connection.execute("DELETE FROM Files WHERE parentId = ?", [
+          itemId,
+        ]);
+      }
+
+      await connection.execute("DELETE FROM Items WHERE id = ?", [itemId]);
+
+      res.status(200).json({
+        message: "Item deleted successfully",
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error deleting item:", error);
+    res.status(500).json({ message: "Error deleting item" });
+  }
+};
+
+exports.renameItem = async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { name } = req.body;
+    const userId = req.userId;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+      const [items] = await connection.execute(
+        `SELECT i.id, i.type FROM Items i
+         WHERE i.id = ? AND (i.userId = ? OR i.id IN (
+           SELECT itemId FROM Permissions WHERE userId = ? AND can_edit = 1
+         ))`,
+        [itemId, userId, userId],
+      );
+
+      if (items.length === 0) {
+        console.log(
+          ` [renameItem] User ${userId} not authorized to rename item ${itemId}`,
+        );
+        return res
+          .status(403)
+          .json({ message: "Item not found or unauthorized" });
+      }
+
+      console.log(
+        ` [renameItem] Renaming item ${itemId} to "${name}" by user ${userId}`,
+      );
+
+      const item = items[0];
+      let extension = null;
+
+      if (item.type === "file") {
+        extension = validateFileExtension(name);
+        if (!extension) {
+          const supportedExts = Object.keys(VALID_EXTENSIONS)
+            .slice(0, 10)
+            .join(", ");
+          return res.status(400).json({
+            message: "Invalid file extension",
+          });
+        }
+      }
+
+      await connection.execute(
+        "UPDATE Items SET name = ?, extension = ? WHERE id = ?",
+        [name, extension, itemId],
+      );
+
+      const [updatedItems] = await connection.execute(
+        "SELECT id, name, type, parentId, extension, createdAt FROM Items WHERE id = ?",
+        [itemId],
+      );
+
+      res.status(200).json({
+        message: "Item renamed successfully",
+        item: updatedItems[0],
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error renaming item:", error);
+    res.status(500).json({ message: "Error renaming item" });
+  }
+};

@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+.no-folder{
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif   ;
+font-size: 13px;
+    margin-top: 10px;
+    color: gray;
+    padding-left: 40px;
+}
