@@ -1,4 +1,4 @@
-const  pool  = require("../config/db");
+const {pool} = require("../config/db");
 
 const givePermission = async (req, res) => {
   try {
@@ -21,7 +21,7 @@ const givePermission = async (req, res) => {
         .json({ message: "File ID and target user ID must be valid numbers" });
     }
 
-    const connection = await pool.getConnection();
+    const connection = await pool.getConnection()
 
     try {
       const [UserIdFromItem] = await connection.execute(

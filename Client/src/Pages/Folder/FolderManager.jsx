@@ -525,10 +525,10 @@ function FolderManager() {
             >
               {folder.name}
             </span>
-
+             
             <div className="folder-inline-actions">
-              {/* <span className="mt-2 mr-4">{name}</span> */}
-              <span className="mt-2 mr-4">{CreateDate || "NA"}</span>
+              <span className="mt-2 mr-4">{folder.creatorName || "NA"}</span>
+              <span className="mt-2 mr-4">{`${CreateDate || "NA"}`}</span>
 
               {isOwner && (
                 <button
@@ -629,7 +629,7 @@ function FolderManager() {
                     </span>
                     <div className="folder-inline-actions">
                       <span className="mt-2">
-                        {new Date(file.createdAt).toISOString().split("T")[0]}
+                        {`${new Date(file.createdAt).toISOString().split("T")[0]} - ${file.creatorName || "NA"}`}
                       </span>
                       {(isImageFile(file.mimeType) ||
                         isPdfFile(file.mimeType, file.originalName)) && (
@@ -667,6 +667,10 @@ function FolderManager() {
 
   const rootFolders = folders.filter((f) => !f.parentId);
 
+  const handleReloadFolders = () => {
+    dispatch(fetchFolderStructure());
+  };
+
   return (
     <div className="folder-manager">
       <div className="folder-manager-header">
@@ -677,6 +681,13 @@ function FolderManager() {
             onClick={() => handleCreateClick(null)}
           >
             <i className="pi pi-plus"></i> New Folder
+          </button>
+          <button
+            className="btn-primary"
+            onClick={handleReloadFolders}
+            title="Reload folders to update changes"
+          >
+            <i className="pi pi-refresh"></i> Reload
           </button>
         </div>
       </div>
@@ -713,7 +724,7 @@ function FolderManager() {
                   </span>
                   <div className="folder-inline-actions">
                     <span className="mt-2">
-                      {new Date(file.createdAt).toISOString().split("T")[0]}
+                      {`${new Date(file.createdAt).toISOString().split("T")[0]} - ${file.creatorName || "NA"}`}
                     </span>
                     {(isImageFile(file.mimeType) ||
                       isPdfFile(file.mimeType, file.originalName)) && (

@@ -252,7 +252,6 @@ const validateFileExtension = (filename) => {
           ` [createItem] Created new ${type} (${newItemId}) with rootFolderId: ${rootFolderId}, parentOwner: ${parentOwnerUserId}, creator: ${userId}`,
         );
 
-        // If the creator is different from parent owner, grant them the SAME permissions they have on the root folder
         if (userId !== parentOwnerUserId) {
           console.log(` [createItem] Fetching creator's permissions on rootFolderId (${rootFolderId})...`);
           const [creatorPerms] = await connection.execute(
@@ -262,7 +261,6 @@ const validateFileExtension = (filename) => {
           );
 
           if (creatorPerms.length > 0) {
-            // Grant the same permissions they have on the root folder
             const perm = creatorPerms[0];
             console.log(
               ` [createItem] Auto-granting creator (${userId}) the same permissions on rootFolderId (${rootFolderId}):`,
@@ -348,22 +346,26 @@ exports.getFolderStructure = async (req, res) => {
       );
 
       const query = `
-        SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId, 
+        SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId, 
+        u.firstName as creatorName,
         NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
-        FROM Items
-        WHERE parentId IS NULL AND (
-          userId = ? 
-          OR id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
+        FROM Items i
+        JOIN Users u ON i.userId = u.id
+        WHERE i.parentId IS NULL AND (
+          i.userId = ? 
+          OR i.id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
         )
         
         UNION ALL
         
-        SELECT id, name, 'file' as type, parentId, rootFolderId, NULL as extension, createdAt, userId,
-        filePath, originalName, size, mimeType
-        FROM Files
-        WHERE parentId IS NULL AND (
-          userId = ?
-          OR id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
+        SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId, NULL as extension, f.createdAt, f.userId,
+        u.firstName as creatorName,
+        f.filePath, f.originalName, f.size, f.mimeType
+        FROM Files f
+        JOIN Users u ON f.userId = u.id
+        WHERE f.parentId IS NULL AND (
+          f.userId = ?
+          OR f.id IN (SELECT fileId FROM Permissions WHERE userId = ? AND can_view = 1)
         )
         
         ORDER BY type DESC, name ASC
@@ -408,31 +410,35 @@ exports.getItemsByParent = async (req, res) => {
 
         const [rootItems] = await connection.execute(
           `
-          SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId,
+          SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId,
+          u.firstName as creatorName,
           NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
-          FROM Items
-          WHERE parentId IS NULL AND (
-            userId = ? OR id IN (
+          FROM Items i
+          JOIN Users u ON i.userId = u.id
+          WHERE i.parentId IS NULL AND (
+            i.userId = ? OR i.id IN (
               SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1
             )
           )
-          ORDER BY type DESC, name ASC
+          ORDER BY i.type DESC, i.name ASC
           `,
           [userId, userId],
         );
 
         const [rootFiles] = await connection.execute(
           `
-          SELECT id, name, 'file' as type, parentId, rootFolderId,
-          NULL as extension, createdAt, userId,
-          filePath, originalName, size, mimeType
-          FROM Files
-          WHERE parentId IS NULL AND (
-            userId = ? OR parentId IN (
-              SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1
+          SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId,
+          NULL as extension, f.createdAt, f.userId,
+          u.firstName as creatorName,
+          f.filePath, f.originalName, f.size, f.mimeType
+          FROM Files f
+          JOIN Users u ON f.userId = u.id
+          WHERE f.parentId IS NULL AND (
+            f.userId = ? OR f.id IN (
+              SELECT fileId FROM Permissions WHERE userId = ? AND can_view = 1
             )
           )
-          ORDER BY name ASC
+          ORDER BY f.name ASC
           `,
           [userId, userId],
         );
@@ -484,23 +490,27 @@ exports.getItemsByParent = async (req, res) => {
 
       const [items] = await connection.execute(
         `
-        SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId,
+        SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId,
+        u.firstName as creatorName,
         NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
-        FROM Items
-        WHERE parentId = ?
-        ORDER BY type DESC, name ASC
+        FROM Items i
+        JOIN Users u ON i.userId = u.id
+        WHERE i.parentId = ?
+        ORDER BY i.type DESC, i.name ASC
         `,
         [parentId],
       );
 
       const [files] = await connection.execute(
         `
-        SELECT id, name, 'file' as type, parentId, rootFolderId,
-        NULL as extension, createdAt, userId,
-        filePath, originalName, size, mimeType
-        FROM Files
-        WHERE parentId = ?
-        ORDER BY name ASC
+        SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId,
+        NULL as extension, f.createdAt, f.userId,
+        u.firstName as creatorName,
+        f.filePath, f.originalName, f.size, f.mimeType
+        FROM Files f
+        JOIN Users u ON f.userId = u.id
+        WHERE f.parentId = ?
+        ORDER BY f.name ASC
         `,
         [parentId],
       );
