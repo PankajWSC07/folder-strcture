@@ -88,6 +88,12 @@
   color: #080;
 }
 
+.permission-alert.info {
+  background-color: #e3f2fd;
+  border-color: #2196f3;
+  color: #1565c0;
+}
+
 .permission-modal-content {
   flex: 1;
   overflow-y: auto;

@@ -252,14 +252,42 @@ const validateFileExtension = (filename) => {
           ` [createItem] Created new ${type} (${newItemId}) with rootFolderId: ${rootFolderId}, parentOwner: ${parentOwnerUserId}, creator: ${userId}`,
         );
 
+        // If the creator is different from parent owner, grant them the SAME permissions they have on the root folder
         if (userId !== parentOwnerUserId) {
-          console.log(` [createItem] Auto-granting permissions to creator (${userId}) for rootFolderId (${rootFolderId})`);
-          await connection.execute(
-            `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete) 
-             VALUES (?, ?, 1, 1, 1, 1, 1)
-             ON DUPLICATE KEY UPDATE can_view=1, can_create=1, can_upload=1, can_edit=1, can_delete=1`,
+          console.log(` [createItem] Fetching creator's permissions on rootFolderId (${rootFolderId})...`);
+          const [creatorPerms] = await connection.execute(
+            `SELECT can_view, can_create, can_upload, can_edit, can_delete FROM Permissions 
+             WHERE itemId = ? AND userId = ?`,
             [rootFolderId, userId],
           );
+
+          if (creatorPerms.length > 0) {
+            // Grant the same permissions they have on the root folder
+            const perm = creatorPerms[0];
+            console.log(
+              ` [createItem] Auto-granting creator (${userId}) the same permissions on rootFolderId (${rootFolderId}):`,
+              perm,
+            );
+            await connection.execute(
+              `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE can_view=?, can_create=?, can_upload=?, can_edit=?, can_delete=?`,
+              [
+                rootFolderId,
+                userId,
+                perm.can_view ? 1 : 0,
+                perm.can_create ? 1 : 0,
+                perm.can_upload ? 1 : 0,
+                perm.can_edit ? 1 : 0,
+                perm.can_delete ? 1 : 0,
+                perm.can_view ? 1 : 0,
+                perm.can_create ? 1 : 0,
+                perm.can_upload ? 1 : 0,
+                perm.can_edit ? 1 : 0,
+                perm.can_delete ? 1 : 0,
+              ],
+            );
+          }
         }
 
         return res.status(201).json({

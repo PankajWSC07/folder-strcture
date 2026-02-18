@@ -540,19 +540,18 @@ function FolderManager() {
                 </button>
               )}
 
-              {!isOwner &&
-                Object.keys(itemPermissions).includes(String(folder.id)) && (
-                  <span
-                    className="lock-indicator"
-                    title="This is a shared folder"
-                    onClick={() => {
-                      popUpHandler(folder.id);
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    🔒
-                  </span>
-                )}
+              {!isOwner && (
+                <span
+                  className="lock-indicator"
+                  title="This is a shared folder"
+                  onClick={() => {
+                    popUpHandler(folder.id);
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  🔒
+                </span>
+              )}
               {folder.type === "folder" && canCreate && (
                 <button
                   className="action-icon-btn"
@@ -843,6 +842,7 @@ function FolderManager() {
         <PermissionModal
           itemId={selectedItemForPermission.id}
           itemName={selectedItemForPermission.name}
+          isOwner={selectedItemForPermission.userId === currentUserId}
           onClose={async () => {
             setShowPermissionModal(false);
 

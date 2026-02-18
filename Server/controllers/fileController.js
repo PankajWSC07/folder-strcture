@@ -111,7 +111,9 @@ exports.uploadFile = async (req, res) => {
         );
 
         if (parentItem.length > 0 && parentItem[0].userId !== userId) {
-          console.log(` [uploadFile] Auto-granting parent owner (${parentItem[0].userId}) permissions to rootFolderId (${rootFolderId})`);
+          // Parent owner is different from uploader
+          // Grant parent owner full permissions (since it's their folder)
+          console.log(` [uploadFile] Auto-granting parent owner (${parentItem[0].userId}) full permissions on rootFolderId (${rootFolderId})`);
           await connection.execute(
             `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
              VALUES (?, ?, 1, 1, 1, 1, 1)
@@ -119,13 +121,40 @@ exports.uploadFile = async (req, res) => {
             [rootFolderId, parentItem[0].userId],
           );
           
-          console.log(` [uploadFile] Auto-granting uploader (${userId}) permissions to rootFolderId (${rootFolderId})`);
-          await connection.execute(
-            `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
-             VALUES (?, ?, 1, 1, 1, 1, 1)
-             ON DUPLICATE KEY UPDATE can_view=1, can_create=1, can_upload=1, can_edit=1, can_delete=1`,
+          // Grant uploader the SAME permissions they have on root folder
+          console.log(` [uploadFile] Fetching uploader's permissions on rootFolderId (${rootFolderId})...`);
+          const [uploaderPerms] = await connection.execute(
+            `SELECT can_view, can_create, can_upload, can_edit, can_delete FROM Permissions 
+             WHERE itemId = ? AND userId = ?`,
             [rootFolderId, userId],
           );
+
+          if (uploaderPerms.length > 0) {
+            const perm = uploaderPerms[0];
+            console.log(
+              ` [uploadFile] Auto-granting uploader (${userId}) the same permissions on rootFolderId (${rootFolderId}):`,
+              perm,
+            );
+            await connection.execute(
+              `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE can_view=?, can_create=?, can_upload=?, can_edit=?, can_delete=?`,
+              [
+                rootFolderId,
+                userId,
+                perm.can_view ? 1 : 0,
+                perm.can_create ? 1 : 0,
+                perm.can_upload ? 1 : 0,
+                perm.can_edit ? 1 : 0,
+                perm.can_delete ? 1 : 0,
+                perm.can_view ? 1 : 0,
+                perm.can_create ? 1 : 0,
+                perm.can_upload ? 1 : 0,
+                perm.can_edit ? 1 : 0,
+                perm.can_delete ? 1 : 0,
+              ],
+            );
+          }
         }
       }
 

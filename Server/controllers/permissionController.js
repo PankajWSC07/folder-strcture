@@ -1,4 +1,4 @@
-const { pool } = require("../config/db");
+const  pool  = require("../config/db");
 
 const givePermission = async (req, res) => {
   try {

@@ -10,10 +10,11 @@ import {
 } from "../../store/permissionSlice";
 import "./PermissionModal.css";
 
-function PermissionModal({ itemId, itemName, onClose }) {
+function PermissionModal({ itemId, itemName, isOwner = false, onClose }) {
   const dispatch = useDispatch();
   const { availableUsers, itemPermissions, loading, error, success } =
     useSelector((state) => state.permissions);
+  const { user: currentUser } = useSelector((state) => state.auth);
 
   const [userPermissions, setUserPermissions] = useState({});
   const [originalPermissions, setOriginalPermissions] = useState({});
@@ -151,7 +152,9 @@ function PermissionModal({ itemId, itemName, onClose }) {
     <div className="permission-modal-overlay" onClick={handleCloseModal}>
       <div className="permission-modal" onClick={(e) => e.stopPropagation()}>
         <div className="permission-modal-header">
-          <h2>Manage Permissions - {itemName}</h2>
+          <h2>
+            {isOwner ? "Manage Permissions" : "View Your Permissions"} - {itemName}
+          </h2>
           <button className="close-btn" onClick={handleCloseModal}>
             ✕
           </button>
@@ -164,54 +167,108 @@ function PermissionModal({ itemId, itemName, onClose }) {
           <div className="permission-loading">Loading...</div>
         ) : (
           <div className="permission-modal-content">
+            {!isOwner && (
+              <div className="permission-alert info">
+                <p>
+                  You do not have permission to manage this shared folder's
+                  permissions. Below are your current access permissions:
+                </p>
+              </div>
+            )}
+
             <div className="permission-users-list">
-              <h3>Users</h3>
+              <h3>{isOwner ? "Users" : "Your Permissions"}</h3>
 
-              {availableUsers.length === 0 ? (
-                <p className="no-users">No other users available</p>
-              ) : (
-                availableUsers.map((user) => {
-                  const userPerms = userPermissions[user.id] || {
-                    can_view: false,
-                    can_create: false,
-                    can_upload: false,
-                    can_edit: false,
-                    can_delete: false,
-                  };
-
-                  return (
-                    <div key={user.id} className="permission-user-row">
-                      <div className="user-info">
-                        <div className="user-name">
-                          {user.firstName} {user.lastName}
-                        </div>
-                        <div className="user-email">{user.email}</div>
-                      </div>
-
-                      <div className="permission-checkboxes">
-                        {[
-                          "can_view",
-                          "can_create",
-                          "can_upload",
-                          "can_edit",
-                          "can_delete",
-                        ].map((permType) => (
-                          <label key={permType} className="permission-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={userPerms[permType] || false}
-                              onChange={() =>
-                                handlePermissionChange(user.id, permType)
-                              }
-                            />
-                            <span>{getPermissionLabel(permType)}</span>
-                          </label>
-                        ))}
-                      </div>
+              {!isOwner && currentUser ? (
+                // Non-owner view: show only their own permissions (read-only)
+                <div className="permission-user-row">
+                  <div className="user-info">
+                    <div className="user-name">
+                      {currentUser.firstName} {currentUser.lastName}
                     </div>
-                  );
-                })
-              )}
+                    <div className="user-email">{currentUser.email}</div>
+                  </div>
+
+                  <div className="permission-checkboxes">
+                    {[
+                      "can_view",
+                      "can_create",
+                      "can_upload",
+                      "can_edit",
+                      "can_delete",
+                    ].map((permType) => {
+                      const userPerms = userPermissions[currentUser.id] || {
+                        can_view: false,
+                        can_create: false,
+                        can_upload: false,
+                        can_edit: false,
+                        can_delete: false,
+                      };
+
+                      return (
+                        <label key={permType} className="permission-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={userPerms[permType] || false}
+                            disabled={true}
+                          />
+                          <span>{getPermissionLabel(permType)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : isOwner ? (
+                // Owner view: show all users with editable checkboxes
+                availableUsers.length === 0 ? (
+                  <p className="no-users">No other users available</p>
+                ) : (
+                  availableUsers.map((user) => {
+                    const userPerms = userPermissions[user.id] || {
+                      can_view: false,
+                      can_create: false,
+                      can_upload: false,
+                      can_edit: false,
+                      can_delete: false,
+                    };
+
+                    return (
+                      <div key={user.id} className="permission-user-row">
+                        <div className="user-info">
+                          <div className="user-name">
+                            {user.firstName} {user.lastName}
+                          </div>
+                          <div className="user-email">{user.email}</div>
+                        </div>
+
+                        <div className="permission-checkboxes">
+                          {[
+                            "can_view",
+                            "can_create",
+                            "can_upload",
+                            "can_edit",
+                            "can_delete",
+                          ].map((permType) => (
+                            <label
+                              key={permType}
+                              className="permission-checkbox"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={userPerms[permType] || false}
+                                onChange={() =>
+                                  handlePermissionChange(user.id, permType)
+                                }
+                              />
+                              <span>{getPermissionLabel(permType)}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              ) : null}
             </div>
           </div>
         )}
@@ -220,9 +277,10 @@ function PermissionModal({ itemId, itemName, onClose }) {
           <button
             className="btn-save-all"
             onClick={handleSaveAll}
-            disabled={loading || !hasChanges}
+            disabled={loading || !hasChanges || !isOwner}
+            title={!isOwner ? "Only the folder owner can modify permissions" : ""}
           >
-            Save All Changes
+            {isOwner ? "Save All Changes" : "Read-Only Mode"}
           </button>
 
           <button className="btn-close" onClick={handleCloseModal}>
