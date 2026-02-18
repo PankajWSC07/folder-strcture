@@ -13,7 +13,6 @@ import {
   downloadFile,
   clearSuccess as clearFileSuccess,
 } from "../../store/fileSlice";
-import { fetchItemPermissions } from "../../store/permissionSlice";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import "./FolderManager.css";
 import FileUpload from "./FileUpload";
@@ -25,11 +24,6 @@ function FolderManager() {
   const { folders, childrenMap, filesMap, loading, error, success } =
     useSelector((state) => state.folder);
   const { success: fileSuccess } = useSelector((state) => state.file);
-
-  const { permissions } = useSelector((state) => state.permissions);
-  const { error: permissionError, success: permissionSuccess } = useSelector(
-    (state) => state.permissions,
-  );
 
   const { user: currentUser } = useSelector((state) => state.auth);
   const currentUserId = currentUser?.id;
@@ -51,8 +45,6 @@ function FolderManager() {
   const [selectedItemForPermission, setSelectedItemForPermission] =
     useState(null);
   const [itemPermissions, setItemPermissions] = useState({});
-
-  const fetchedPermissionsRef = React.useRef(new Set());
 
   useEffect(() => {
     dispatch(fetchFolderStructure());
@@ -93,149 +85,68 @@ function FolderManager() {
   }, [fileSuccess, dispatch, parentToRefresh]);
 
   useEffect(() => {
-    const fetchPermissionsForFolders = async () => {
-      console.log(
-        " Permission fetching - itemPermissions is:",
-        itemPermissions,
-      );
+    // Extract permissions from folders and child items that come with the structure API
+    const extractPermissionsFromData = () => {
+      const permissionsMap = {};
 
-      const allFolderIds = new Set();
+      const processItem = (item) => {
+        if (item && item.id) {
+          if (item.permissions && Array.isArray(item.permissions)) {
+            const currentUserPermission = item.permissions.find(
+              (p) => p.userId === currentUserId,
+            );
 
-      const collectAllDescendants = (folderId) => {
-        allFolderIds.add(folderId);
-        const children = childrenMap[folderId] || [];
-        children.forEach((child) => {
-          if (child.type === "folder") {
-            collectAllDescendants(child.id);
-          } else {
-            allFolderIds.add(child.id);
+            if (currentUserPermission) {
+              permissionsMap[item.id] = {
+                can_create: Boolean(currentUserPermission.can_create),
+                can_upload: Boolean(currentUserPermission.can_upload),
+                can_edit: Boolean(currentUserPermission.can_edit),
+                can_delete: Boolean(currentUserPermission.can_delete),
+                can_view: Boolean(currentUserPermission.can_view),
+              };
+            } else {
+              permissionsMap[item.id] = {
+                can_create: false,
+                can_upload: false,
+                can_edit: false,
+                can_delete: false,
+                can_view: false,
+              };
+            }
           }
-        });
+        }
       };
 
-      // Add root folders
+      // Process root folders
       folders.forEach((folder) => {
-        allFolderIds.add(folder.id);
+        processItem(folder);
       });
 
-      Object.keys(openFolders).forEach((folderId) => {
-        const folder = findFolderById(folders, parseInt(folderId));
-        if (folder) {
-          const children = childrenMap[folderId] || [];
+      // Process children
+      Object.values(childrenMap).forEach((children) => {
+        if (Array.isArray(children)) {
           children.forEach((child) => {
-            if (child.type === "folder") {
-              collectAllDescendants(child.id);
-            } else {
-              allFolderIds.add(child.id);
-            }
+            processItem(child);
           });
         }
       });
 
-      console.log(" All folder IDs to check permissions for:", allFolderIds);
-
-      for (const folderId of allFolderIds) {
-        if (fetchedPermissionsRef.current.has(folderId)) {
-          continue;
+      // Process files
+      Object.values(filesMap).forEach((files) => {
+        if (Array.isArray(files)) {
+          files.forEach((file) => {
+            processItem(file);
+          });
         }
+      });
 
-        let folder = findFolderById(folders, parseInt(folderId));
-        if (!folder) {
-          for (const parentId of Object.keys(childrenMap)) {
-            folder = childrenMap[parentId]?.find(
-              (child) => child.id === parseInt(folderId),
-            );
-            if (folder) break;
-          }
-        }
-
-        if (folder) {
-          try {
-            console.log(
-              ` Fetching permissions for ${folder.type} ${folderId} (${folder.name})...`,
-            );
-            const response = await dispatch(
-              fetchItemPermissions({ itemId: folderId }),
-            );
-            fetchedPermissionsRef.current.add(folderId);
-
-            console.log(` API Response for ${folderId}:`, {
-              payload: response.payload,
-              length: response.payload?.length,
-            });
-
-            if (
-              response.payload &&
-              Array.isArray(response.payload) &&
-              response.payload.length > 0
-            ) {
-              const currentUserPermission = response.payload.find(
-                (p) => p.userId === currentUserId,
-              );
-
-              if (currentUserPermission) {
-                console.log(
-                  ` Storing permission object for ${folderId}:`,
-                  currentUserPermission,
-                );
-
-                setItemPermissions((prev) => ({
-                  ...prev,
-                  [folderId]: {
-                    can_create: Boolean(currentUserPermission.can_create),
-                    can_upload: Boolean(currentUserPermission.can_upload),
-                    can_edit: Boolean(currentUserPermission.can_edit),
-                    can_delete: Boolean(currentUserPermission.can_delete),
-                    can_view: Boolean(currentUserPermission.can_view),
-                  },
-                }));
-              } else {
-                console.warn(
-                  ` No permissions found for current user on ${folderId}, setting defaults`,
-                );
-                setItemPermissions((prev) => ({
-                  ...prev,
-                  [folderId]: {
-                    can_create: false,
-                    can_upload: false,
-                    can_edit: false,
-                    can_delete: false,
-                    can_view: false,
-                  },
-                }));
-              }
-            } else {
-              console.warn(
-                ` No permissions found for ${folderId}, setting defaults`,
-              );
-              setItemPermissions((prev) => ({
-                ...prev,
-                [folderId]: {
-                  can_create: false,
-                  can_upload: false,
-                  can_edit: false,
-                  can_delete: false,
-                  can_view: false,
-                },
-              }));
-            }
-          } catch (error) {
-            console.error(
-              ` Error fetching permissions for ${folderId}:`,
-              error,
-            );
-          }
-        }
-      }
+      setItemPermissions(permissionsMap);
     };
 
-    if (
-      currentUserId &&
-      (folders.length > 0 || Object.keys(childrenMap).length > 0)
-    ) {
-      fetchPermissionsForFolders();
+    if (currentUserId && (folders.length > 0 || Object.keys(childrenMap).length > 0)) {
+      extractPermissionsFromData();
     }
-  }, [folders, currentUserId, openFolders, childrenMap, dispatch]);
+  }, [folders, currentUserId, childrenMap, filesMap]);
 
   const findFolderById = (items, id) => {
     for (let item of items) {

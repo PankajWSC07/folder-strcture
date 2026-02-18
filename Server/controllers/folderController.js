@@ -378,13 +378,75 @@ exports.getFolderStructure = async (req, res) => {
         userId,
       ]);
 
+      // Fetch permissions for each item
+      const itemsWithPermissions = await Promise.all(
+        items.map(async (item) => {
+          const rootFolderId =
+            item.rootFolderId === 0 || item.rootFolderId === null
+              ? item.id
+              : item.rootFolderId;
+
+          const isOwner = item.userId === userId;
+
+          let permissionQuery;
+          let permissionParams;
+
+          if (isOwner) {
+            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                       FROM Permissions p
+                       JOIN Users u ON p.userId = u.id
+                       WHERE p.itemId = ?
+                       ORDER BY u.firstName, u.lastName`;
+            permissionParams = [rootFolderId];
+          } else {
+            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                       FROM Permissions p
+                       JOIN Users u ON p.userId = u.id
+                       WHERE p.itemId = ? AND p.userId = ?`;
+            permissionParams = [rootFolderId, userId];
+          }
+
+          try {
+            const [permissions] = await connection.execute(
+              permissionQuery,
+              permissionParams,
+            );
+
+            const convertedPermissions = permissions.map((p) => ({
+              ...p,
+              can_view: Boolean(p.can_view),
+              can_create: Boolean(p.can_create),
+              can_upload: Boolean(p.can_upload),
+              can_edit: Boolean(p.can_edit),
+              can_delete: Boolean(p.can_delete),
+            }));
+
+            return {
+              ...item,
+              permissions: convertedPermissions,
+            };
+          } catch (error) {
+            console.error(
+              ` Error fetching permissions for item ${item.id}:`,
+              error,
+            );
+            return {
+              ...item,
+              permissions: [],
+            };
+          }
+        }),
+      );
+
       console.log(
-        ` [getFolderStructure] Returning ${items.length} root items for user ${userId}`,
+        ` [getFolderStructure] Returning ${itemsWithPermissions.length} root items for user ${userId}`,
       );
 
       res.status(200).json({
         message: "Folder structure retrieved successfully",
-        data: items,
+        data: itemsWithPermissions,
       });
     } finally {
       connection.release();
@@ -445,9 +507,71 @@ exports.getItemsByParent = async (req, res) => {
 
         const data = [...rootItems, ...rootFiles];
 
+        // Fetch permissions for each root item
+        const dataWithPermissions = await Promise.all(
+          data.map(async (item) => {
+            const rootFolderId =
+              item.rootFolderId === 0 || item.rootFolderId === null
+                ? item.id
+                : item.rootFolderId;
+
+            const isOwner = item.userId === userId;
+
+            let permissionQuery;
+            let permissionParams;
+
+            if (isOwner) {
+              permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                                p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                         FROM Permissions p
+                         JOIN Users u ON p.userId = u.id
+                         WHERE p.itemId = ?
+                         ORDER BY u.firstName, u.lastName`;
+              permissionParams = [rootFolderId];
+            } else {
+              permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                                p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                         FROM Permissions p
+                         JOIN Users u ON p.userId = u.id
+                         WHERE p.itemId = ? AND p.userId = ?`;
+              permissionParams = [rootFolderId, userId];
+            }
+
+            try {
+              const [permissions] = await connection.execute(
+                permissionQuery,
+                permissionParams,
+              );
+
+              const convertedPermissions = permissions.map((p) => ({
+                ...p,
+                can_view: Boolean(p.can_view),
+                can_create: Boolean(p.can_create),
+                can_upload: Boolean(p.can_upload),
+                can_edit: Boolean(p.can_edit),
+                can_delete: Boolean(p.can_delete),
+              }));
+
+              return {
+                ...item,
+                permissions: convertedPermissions,
+              };
+            } catch (error) {
+              console.error(
+                ` Error fetching permissions for item ${item.id}:`,
+                error,
+              );
+              return {
+                ...item,
+                permissions: [],
+              };
+            }
+          }),
+        );
+
         return res.status(200).json({
           message: "Root items retrieved successfully",
-          data,
+          data: dataWithPermissions,
         });
       }
 
@@ -522,9 +646,71 @@ exports.getItemsByParent = async (req, res) => {
         return a.type === "folder" ? -1 : 1;
       });
 
+      // Fetch permissions for each item
+      const dataWithPermissions = await Promise.all(
+        data.map(async (item) => {
+          const rootFolderId =
+            item.rootFolderId === 0 || item.rootFolderId === null
+              ? item.id
+              : item.rootFolderId;
+
+          const isOwner = item.userId === userId;
+
+          let permissionQuery;
+          let permissionParams;
+
+          if (isOwner) {
+            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                       FROM Permissions p
+                       JOIN Users u ON p.userId = u.id
+                       WHERE p.itemId = ?
+                       ORDER BY u.firstName, u.lastName`;
+            permissionParams = [rootFolderId];
+          } else {
+            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
+                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
+                       FROM Permissions p
+                       JOIN Users u ON p.userId = u.id
+                       WHERE p.itemId = ? AND p.userId = ?`;
+            permissionParams = [rootFolderId, userId];
+          }
+
+          try {
+            const [permissions] = await connection.execute(
+              permissionQuery,
+              permissionParams,
+            );
+
+            const convertedPermissions = permissions.map((p) => ({
+              ...p,
+              can_view: Boolean(p.can_view),
+              can_create: Boolean(p.can_create),
+              can_upload: Boolean(p.can_upload),
+              can_edit: Boolean(p.can_edit),
+              can_delete: Boolean(p.can_delete),
+            }));
+
+            return {
+              ...item,
+              permissions: convertedPermissions,
+            };
+          } catch (error) {
+            console.error(
+              ` Error fetching permissions for item ${item.id}:`,
+              error,
+            );
+            return {
+              ...item,
+              permissions: [],
+            };
+          }
+        }),
+      );
+
       res.status(200).json({
         message: "Items retrieved successfully",
-        data,
+        data: dataWithPermissions,
       });
     } finally {
       connection.release();
