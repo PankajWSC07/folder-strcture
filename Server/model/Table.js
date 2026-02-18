@@ -54,13 +54,15 @@ const createTables = async () => {
         type ENUM('folder', 'file') NOT NULL,
         userId INT NOT NULL,
         parentId INT,
+        rootFolderId INT DEFAULT 0,
         extension VARCHAR(50),
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE,
         FOREIGN KEY (parentId) REFERENCES Items(id) ON DELETE CASCADE,
         INDEX idx_userId_parentId (userId, parentId),
-        INDEX idx_userId_type (userId, type)
+        INDEX idx_userId_type (userId, type),
+        INDEX idx_rootFolderId (rootFolderId)
       )
     `);
 
@@ -74,13 +76,15 @@ const createTables = async () => {
         mimeType VARCHAR(100),
         userId INT NOT NULL,
         parentId INT,
+        rootFolderId INT DEFAULT 0,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE,
         FOREIGN KEY (parentId) REFERENCES Items(id) ON DELETE CASCADE,
         INDEX idx_userId_parentId (userId, parentId),
         INDEX idx_userId (userId),
-        INDEX idx_parentId (parentId)
+        INDEX idx_parentId (parentId),
+        INDEX idx_rootFolderId (rootFolderId)
       )
     `);
 

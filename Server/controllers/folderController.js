@@ -145,7 +145,7 @@ const validateFileExtension = (filename) => {
   return VALID_EXTENSIONS.hasOwnProperty(ext) ? ext : null;
 };
 
-exports.createItem = async (req, res) => {
+  exports.createItem = async (req, res) => {
   try {
     const { name, type, parentId } = req.body;
     const userId = req.userId;
@@ -179,6 +179,18 @@ exports.createItem = async (req, res) => {
         }
       }
 
+      let rootFolderId = 0;
+      if (parentId) {
+        const [parentItem] = await connection.execute(
+          "SELECT rootFolderId FROM Items WHERE id = ?",
+          [parentId],
+        );
+        
+        if (parentItem.length > 0) {
+          rootFolderId = parentItem[0].rootFolderId === 0 ? parentId : parentItem[0].rootFolderId;
+        }
+      }
+
       if (parentId) {
         const [ownFolders] = await connection.execute(
           "SELECT id, type, userId FROM Items WHERE id = ? AND userId = ? AND type = ?",
@@ -188,8 +200,8 @@ exports.createItem = async (req, res) => {
         if (ownFolders.length > 0) {
           const now = new Date().toISOString().slice(0, 19).replace("T", " ");
           const [result] = await connection.execute(
-            "INSERT INTO Items (name, type, userId, parentId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [name, type, userId, parentId || null, extension, now, now],
+            "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [name, type, userId, parentId || null, rootFolderId, extension, now, now],
           );
 
           return res.status(201).json({
@@ -200,6 +212,7 @@ exports.createItem = async (req, res) => {
               type,
               userId,
               parentId: parentId || null,
+              rootFolderId,
               extension,
               createdAt: now,
               updatedAt: now,
@@ -207,48 +220,71 @@ exports.createItem = async (req, res) => {
           });
         }
 
+ 
         const [sharedFolder] = await connection.execute(
           `SELECT i.id, i.type, i.userId 
            FROM Items i
            INNER JOIN Permissions p ON i.id = p.itemId
-           WHERE i.id = ? AND p.userId = ? AND p.can_create = true AND i.type = ?`,
-          [parentId, userId, "folder"],
+           WHERE i.id = ? AND p.userId = ? AND p.can_create = 1 AND i.type = ?`,
+          [rootFolderId, userId, "folder"],
         );
 
         if (sharedFolder.length === 0) {
+          console.log(
+            `[createItem] Permission check failed for userId: ${userId}, parentId: ${parentId}, rootFolderId: ${rootFolderId}`,
+          );
           return res.status(403).json({
             message:
               "You do not have permission to create items in this folder",
           });
         }
+
+        const parentOwnerUserId = sharedFolder[0].userId;
+        const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+        const [result] = await connection.execute(
+          "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [name, type, parentOwnerUserId, parentId || null, rootFolderId, extension, now, now],
+        );
+
+        const newItemId = result.insertId;
+
+        console.log(
+          ` [createItem] Created new ${type} (${newItemId}) with rootFolderId: ${rootFolderId}, parentOwner: ${parentOwnerUserId}, creator: ${userId}`,
+        );
+
+        if (userId !== parentOwnerUserId) {
+          console.log(` [createItem] Auto-granting permissions to creator (${userId}) for rootFolderId (${rootFolderId})`);
+          await connection.execute(
+            `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete) 
+             VALUES (?, ?, 1, 1, 1, 1, 1)
+             ON DUPLICATE KEY UPDATE can_view=1, can_create=1, can_upload=1, can_edit=1, can_delete=1`,
+            [rootFolderId, userId],
+          );
+        }
+
+        return res.status(201).json({
+          message: `${type === "folder" ? "Folder" : "File"} created successfully`,
+          item: {
+            id: newItemId,
+            name,
+            type,
+            userId: parentOwnerUserId,
+            parentId: parentId || null,
+            rootFolderId,
+            extension,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
       }
 
       const now = new Date().toISOString().slice(0, 19).replace("T", " ");
       const [result] = await connection.execute(
-        "INSERT INTO Items (name, type, userId, parentId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [name, type, userId, parentId || null, extension, now, now],
+        "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [name, type, userId, parentId || null, rootFolderId, extension, now, now],
       );
 
       const newItemId = result.insertId;
-
-      if (parentId) {
-        const [parentItem] = await connection.execute(
-          "SELECT userId FROM Items WHERE id = ?",
-          [parentId],
-        );
-
-        if (parentItem.length > 0 && parentItem[0].userId !== userId) {
-          console.log(
-            ` [createItem] Auto-granting parent owner (${parentItem[0].userId}) permissions to new ${type} (${newItemId})`,
-          );
-          await connection.execute(
-            `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
-             VALUES (?, ?, true, true, true, true, true)
-             ON DUPLICATE KEY UPDATE can_view=true, can_create=true, can_upload=true, can_edit=true, can_delete=true`,
-            [newItemId, parentItem[0].userId],
-          );
-        }
-      }
 
       res.status(201).json({
         message: `${type === "folder" ? "Folder" : "File"} created successfully`,
@@ -258,6 +294,7 @@ exports.createItem = async (req, res) => {
           type,
           userId,
           parentId: parentId || null,
+          rootFolderId,
           extension,
           createdAt: now,
           updatedAt: now,
@@ -271,7 +308,7 @@ exports.createItem = async (req, res) => {
     res.status(500).json({ message: "Error creating item" });
   }
 };
-
+  
 exports.getFolderStructure = async (req, res) => {
   try {
     const userId = req.userId;
@@ -283,7 +320,7 @@ exports.getFolderStructure = async (req, res) => {
       );
 
       const query = `
-        SELECT id, name, type, parentId, extension, createdAt, userId, 
+        SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId, 
         NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
         FROM Items
         WHERE parentId IS NULL AND (
@@ -293,7 +330,7 @@ exports.getFolderStructure = async (req, res) => {
         
         UNION ALL
         
-        SELECT id, name, 'file' as type, parentId, NULL as extension, createdAt, userId,
+        SELECT id, name, 'file' as type, parentId, rootFolderId, NULL as extension, createdAt, userId,
         filePath, originalName, size, mimeType
         FROM Files
         WHERE parentId IS NULL AND (
@@ -343,7 +380,7 @@ exports.getItemsByParent = async (req, res) => {
 
         const [rootItems] = await connection.execute(
           `
-          SELECT id, name, type, parentId, extension, createdAt, userId,
+          SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId,
           NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
           FROM Items
           WHERE parentId IS NULL AND (
@@ -358,7 +395,7 @@ exports.getItemsByParent = async (req, res) => {
 
         const [rootFiles] = await connection.execute(
           `
-          SELECT id, name, 'file' as type, parentId,
+          SELECT id, name, 'file' as type, parentId, rootFolderId,
           NULL as extension, createdAt, userId,
           filePath, originalName, size, mimeType
           FROM Files
@@ -419,7 +456,7 @@ exports.getItemsByParent = async (req, res) => {
 
       const [items] = await connection.execute(
         `
-        SELECT id, name, type, parentId, extension, createdAt, userId,
+        SELECT id, name, type, parentId, rootFolderId, extension, createdAt, userId,
         NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
         FROM Items
         WHERE parentId = ?
@@ -430,7 +467,7 @@ exports.getItemsByParent = async (req, res) => {
 
       const [files] = await connection.execute(
         `
-        SELECT id, name, 'file' as type, parentId,
+        SELECT id, name, 'file' as type, parentId, rootFolderId,
         NULL as extension, createdAt, userId,
         filePath, originalName, size, mimeType
         FROM Files
@@ -473,11 +510,13 @@ exports.deleteItem = async (req, res) => {
 
     try {
       const [items] = await connection.execute(
-        `SELECT i.id, i.type, i.userId FROM Items i
-         WHERE i.id = ? AND (i.userId = ? OR i.id IN (
+        `SELECT i.id, i.type, i.userId, i.rootFolderId FROM Items i
+         WHERE i.id = ? AND (i.userId = ? OR i.rootFolderId IN (
+           SELECT itemId FROM Permissions WHERE userId = ? AND can_delete = 1
+         ) OR i.id IN (
            SELECT itemId FROM Permissions WHERE userId = ? AND can_delete = 1
          ))`,
-        [itemId, userId, userId],
+        [itemId, userId, userId, userId],
       );
 
       if (items.length === 0) {
@@ -579,11 +618,13 @@ exports.renameItem = async (req, res) => {
 
     try {
       const [items] = await connection.execute(
-        `SELECT i.id, i.type FROM Items i
-         WHERE i.id = ? AND (i.userId = ? OR i.id IN (
+        `SELECT i.id, i.type, i.rootFolderId FROM Items i
+         WHERE i.id = ? AND (i.userId = ? OR i.rootFolderId IN (
+           SELECT itemId FROM Permissions WHERE userId = ? AND can_edit = 1
+         ) OR i.id IN (
            SELECT itemId FROM Permissions WHERE userId = ? AND can_edit = 1
          ))`,
-        [itemId, userId, userId],
+        [itemId, userId, userId, userId],
       );
 
       if (items.length === 0) {

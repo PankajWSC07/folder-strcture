@@ -30,7 +30,7 @@ function FolderManager() {
   const { error: permissionError, success: permissionSuccess } = useSelector(
     (state) => state.permissions,
   );
-  
+
   const { user: currentUser } = useSelector((state) => state.auth);
   const currentUserId = currentUser?.id;
 
@@ -94,33 +94,36 @@ function FolderManager() {
 
   useEffect(() => {
     const fetchPermissionsForFolders = async () => {
-      console.log(" Permission fetching - itemPermissions is:", itemPermissions);
-      
+      console.log(
+        " Permission fetching - itemPermissions is:",
+        itemPermissions,
+      );
+
       const allFolderIds = new Set();
-      
+
       const collectAllDescendants = (folderId) => {
         allFolderIds.add(folderId);
         const children = childrenMap[folderId] || [];
         children.forEach((child) => {
-          if (child.type === 'folder') {
+          if (child.type === "folder") {
             collectAllDescendants(child.id);
           } else {
             allFolderIds.add(child.id);
           }
         });
       };
-      
+
       // Add root folders
       folders.forEach((folder) => {
         allFolderIds.add(folder.id);
       });
-      
+
       Object.keys(openFolders).forEach((folderId) => {
         const folder = findFolderById(folders, parseInt(folderId));
         if (folder) {
           const children = childrenMap[folderId] || [];
           children.forEach((child) => {
-            if (child.type === 'folder') {
+            if (child.type === "folder") {
               collectAllDescendants(child.id);
             } else {
               allFolderIds.add(child.id);
@@ -139,50 +142,97 @@ function FolderManager() {
         let folder = findFolderById(folders, parseInt(folderId));
         if (!folder) {
           for (const parentId of Object.keys(childrenMap)) {
-            folder = childrenMap[parentId]?.find(child => child.id === parseInt(folderId));
+            folder = childrenMap[parentId]?.find(
+              (child) => child.id === parseInt(folderId),
+            );
             if (folder) break;
           }
         }
 
-        if (folder && folder.userId !== currentUserId) {
+        if (folder) {
           try {
-            console.log(` Fetching permissions for ${folder.type} ${folderId} (${folder.name})...`);
-            const response = await dispatch(fetchItemPermissions({ itemId: folderId }));
+            console.log(
+              ` Fetching permissions for ${folder.type} ${folderId} (${folder.name})...`,
+            );
+            const response = await dispatch(
+              fetchItemPermissions({ itemId: folderId }),
+            );
             fetchedPermissionsRef.current.add(folderId);
-            
+
             console.log(` API Response for ${folderId}:`, {
               payload: response.payload,
-              length: response.payload?.length
+              length: response.payload?.length,
             });
-            
-            if (response.payload && Array.isArray(response.payload) && response.payload.length > 0) {
-              const permObject = response.payload[0];
-              console.log(` Storing permission object for ${folderId}:`, permObject);
-              setItemPermissions((prev) => ({
-                ...prev,
-                [folderId]: permObject,
-              }));
+
+            if (
+              response.payload &&
+              Array.isArray(response.payload) &&
+              response.payload.length > 0
+            ) {
+              const currentUserPermission = response.payload.find(
+                (p) => p.userId === currentUserId,
+              );
+
+              if (currentUserPermission) {
+                console.log(
+                  ` Storing permission object for ${folderId}:`,
+                  currentUserPermission,
+                );
+
+                setItemPermissions((prev) => ({
+                  ...prev,
+                  [folderId]: {
+                    can_create: Boolean(currentUserPermission.can_create),
+                    can_upload: Boolean(currentUserPermission.can_upload),
+                    can_edit: Boolean(currentUserPermission.can_edit),
+                    can_delete: Boolean(currentUserPermission.can_delete),
+                    can_view: Boolean(currentUserPermission.can_view),
+                  },
+                }));
+              } else {
+                console.warn(
+                  ` No permissions found for current user on ${folderId}, setting defaults`,
+                );
+                setItemPermissions((prev) => ({
+                  ...prev,
+                  [folderId]: {
+                    can_create: false,
+                    can_upload: false,
+                    can_edit: false,
+                    can_delete: false,
+                    can_view: false,
+                  },
+                }));
+              }
             } else {
-              console.warn(` No permissions found for ${folderId}, setting defaults`);
+              console.warn(
+                ` No permissions found for ${folderId}, setting defaults`,
+              );
               setItemPermissions((prev) => ({
                 ...prev,
-                [folderId]: { 
-                  can_create: false, 
+                [folderId]: {
+                  can_create: false,
                   can_upload: false,
                   can_edit: false,
                   can_delete: false,
-                  can_view: false
+                  can_view: false,
                 },
               }));
             }
           } catch (error) {
-            console.error(` Error fetching permissions for ${folderId}:`, error);
+            console.error(
+              ` Error fetching permissions for ${folderId}:`,
+              error,
+            );
           }
         }
       }
     };
 
-    if (currentUserId && (folders.length > 0 || Object.keys(childrenMap).length > 0)) {
+    if (
+      currentUserId &&
+      (folders.length > 0 || Object.keys(childrenMap).length > 0)
+    ) {
       fetchPermissionsForFolders();
     }
   }, [folders, currentUserId, openFolders, childrenMap, dispatch]);
@@ -200,12 +250,12 @@ function FolderManager() {
   const hasPermission = (folderId, permissionType) => {
     const folder = findFolderById(folders, folderId);
     if (!folder) return false;
-    
+
     if (folder.userId === currentUserId) return true;
-    
+
     const folderPerms = itemPermissions[folderId];
     if (!folderPerms) return false;
-    
+
     return folderPerms[permissionType] === true;
   };
 
@@ -227,16 +277,18 @@ function FolderManager() {
   const handleCreateClick = (parentId = null) => {
     if (parentId) {
       const targetFolder = findFolderById(folders, parentId);
-      
+
       if (targetFolder && targetFolder.userId !== currentUserId) {
         const permission = itemPermissions[parentId];
         if (!permission || permission.can_create !== true) {
-          alert("You do not have permission to create items in this shared folder");
+          alert(
+            "You do not have permission to create items in this shared folder",
+          );
           return;
         }
       }
     }
-    
+
     setParentIdForCreate(parentId);
     setCreateType("folder");
     setNewItemName("");
@@ -404,7 +456,15 @@ function FolderManager() {
   };
 
   const popUpHandler = (folderId) => {
-    const folder = folders.find((f) => f.id === folderId);
+    let folder = folders.find((f) => f.id === folderId);
+
+    if (!folder) {
+      for (const parentId of Object.keys(childrenMap)) {
+        folder = childrenMap[parentId]?.find((child) => child.id === folderId);
+        if (folder) break;
+      }
+    }
+
     if (!folder) {
       alert("Folder not found");
       return;
@@ -419,26 +479,27 @@ function FolderManager() {
     const isLoading = loading[folder.id] || false;
     const isSelected = selectedItem?.id === folder.id;
     const CreateDate = new Date(folder.createdAt).toISOString().split("T")[0];
-    
+
     const isOwner = folder.userId === currentUserId;
-    
 
     const folderPerms = itemPermissions[folder.id] || {};
     const canCreate = isOwner || Boolean(folderPerms.can_create);
     const canUpload = isOwner || Boolean(folderPerms.can_upload);
     const canEdit = isOwner || Boolean(folderPerms.can_edit);
     const canDelete = isOwner || Boolean(folderPerms.can_delete);
-    
-    if (!isOwner) {
-      console.log(`Folder "${folder.name}" (ID: ${folder.id}) - Perms:`, {
-        isOwner,
-        folderPerms,
-        canCreate,
-        canUpload,
-        canEdit,
-        canDelete,
-      });
-    }
+    const name = folderPerms?.firstName ? folderPerms.firstName : "NA";
+    console.log(name);
+
+    // if (!isOwner) {
+    //   console.log(`Folder "${folder.name}" (ID: ${folder.id}) - Perms:`, {
+    //     isOwner,
+    //     folderPerms,
+    //     canCreate,
+    //     canUpload,
+    //     canEdit,
+    //     canDelete,
+    //   });
+    // }
 
     return (
       <div key={folder.id} className="folder-item-wrapper">
@@ -466,30 +527,39 @@ function FolderManager() {
             </span>
 
             <div className="folder-inline-actions">
+              {/* <span className="mt-2 mr-4">{name}</span> */}
               <span className="mt-2 mr-4">{CreateDate || "NA"}</span>
 
               {isOwner && (
                 <button
                   className="action-icon-btn mr-2"
-                  title="permissions"
+                  title="Manage permissions"
                   onClick={() => popUpHandler(folder.id)}
                 >
                   <i className="pi pi-lock"></i>
                 </button>
               )}
-              
-              {!isOwner && (
-                <span className="lock-indicator" title="This is a shared folder">
-                  🔒
-                </span>
-              )}
+
+              {!isOwner &&
+                Object.keys(itemPermissions).includes(String(folder.id)) && (
+                  <span
+                    className="lock-indicator"
+                    title="This is a shared folder"
+                    onClick={() => {
+                      popUpHandler(folder.id);
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    🔒
+                  </span>
+                )}
               {folder.type === "folder" && canCreate && (
                 <button
                   className="action-icon-btn"
                   title="Add subfolder"
                   onClick={() => handleCreateClick(folder.id)}
                 >
-                  ➕
+                  <i className="pi pi-plus"></i>
                 </button>
               )}
               {folder.type === "folder" && canUpload && (
@@ -510,7 +580,7 @@ function FolderManager() {
                   title="Edit"
                   onClick={() => handleRenameClick(folder)}
                 >
-                  ✏️
+                  <i className="pi pi-file-edit"></i>
                 </button>
               )}
               {canDelete && (
@@ -519,7 +589,7 @@ function FolderManager() {
                   title="Delete"
                   onClick={() => handleDeleteClick(folder.id)}
                 >
-                  🗑️
+                  <i className="pi pi-trash"></i>
                 </button>
               )}
             </div>
@@ -577,14 +647,14 @@ function FolderManager() {
                         title="Download"
                         onClick={() => handleDownloadFile(file)}
                       >
-                        📥
+                        <i className="pi pi-download"></i>
                       </button>
                       <button
                         className="action-icon-btn delete-icon"
                         title="Delete"
                         onClick={() => handleDeleteFile(file.id, folder.id)}
                       >
-                        🗑️
+                        <i className="pi pi-trash"></i>
                       </button>
                     </div>
                   </div>
@@ -607,7 +677,7 @@ function FolderManager() {
             className="btn-primary"
             onClick={() => handleCreateClick(null)}
           >
-            ➕ New Folder
+            <i className="pi pi-plus"></i> New Folder
           </button>
         </div>
       </div>
@@ -624,7 +694,7 @@ function FolderManager() {
                 className="btn-primary"
                 onClick={() => handleCreateClick(null)}
               >
-                ➕ Create First Folder
+                <i className="pi pi-plus"></i> Create First Folder
               </button>
             </div>
           )}
@@ -661,14 +731,14 @@ function FolderManager() {
                       title="Download"
                       onClick={() => handleDownloadFile(file)}
                     >
-                      📥
+                      <i className="pi pi-download"></i>
                     </button>
                     <button
                       className="action-icon-btn delete-icon"
                       title="Delete"
                       onClick={() => handleDeleteFile(file.id, null)}
                     >
-                      🗑️
+                      <i className="pi pi-trash"></i>
                     </button>
                   </div>
                 </div>
@@ -775,24 +845,50 @@ function FolderManager() {
           itemName={selectedItemForPermission.name}
           onClose={async () => {
             setShowPermissionModal(false);
-            
+
             if (selectedItemForPermission.id) {
               try {
-                const response = await dispatch(fetchItemPermissions({ itemId: selectedItemForPermission.id }));
+                const response = await dispatch(
+                  fetchItemPermissions({
+                    itemId: selectedItemForPermission.id,
+                  }),
+                );
                 if (response.payload && response.payload.length > 0) {
-                  setItemPermissions((prev) => ({
-                    ...prev,
-                    [selectedItemForPermission.id]: response.payload[0],
-                  }));
+                  const currentUserPermission = response.payload.find(
+                    (p) => p.userId === currentUserId,
+                  );
+                  if (currentUserPermission) {
+                    setItemPermissions((prev) => ({
+                      ...prev,
+                      [selectedItemForPermission.id]: {
+                        can_create: Boolean(currentUserPermission.can_create),
+                        can_upload: Boolean(currentUserPermission.can_upload),
+                        can_edit: Boolean(currentUserPermission.can_edit),
+                        can_delete: Boolean(currentUserPermission.can_delete),
+                        can_view: Boolean(currentUserPermission.can_view),
+                      },
+                    }));
+                  } else {
+                    setItemPermissions((prev) => ({
+                      ...prev,
+                      [selectedItemForPermission.id]: {
+                        can_create: false,
+                        can_upload: false,
+                        can_edit: false,
+                        can_delete: false,
+                        can_view: false,
+                      },
+                    }));
+                  }
                 } else {
                   setItemPermissions((prev) => ({
                     ...prev,
-                    [selectedItemForPermission.id]: { 
-                      can_create: false, 
+                    [selectedItemForPermission.id]: {
+                      can_create: false,
                       can_upload: false,
                       can_edit: false,
                       can_delete: false,
-                      can_view: false
+                      can_view: false,
                     },
                   }));
                 }
@@ -800,7 +896,7 @@ function FolderManager() {
                 console.error("Error refetching permissions:", error);
               }
             }
-            
+
             setSelectedItemForPermission(null);
           }}
         />

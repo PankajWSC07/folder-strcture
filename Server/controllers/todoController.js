@@ -88,7 +88,6 @@ exports.updateTodo = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if todo exists and belongs to user
       const [existingTodos] = await connection.execute(
         "SELECT id, todo, description, date, status FROM Todos WHERE id = ? AND userId = ?",
         [id, req.userId]
@@ -173,7 +172,6 @@ exports.deleteTodo = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if todo exists and belongs to user
       const [todos] = await connection.execute(
         "SELECT id FROM Todos WHERE id = ? AND userId = ?",
         [id, req.userId]

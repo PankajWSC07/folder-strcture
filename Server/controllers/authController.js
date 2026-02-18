@@ -53,7 +53,7 @@ exports.register = async (req, res) => {
       // Create new user
       const [result] = await connection.execute(
         "INSERT INTO Users (firstName, lastName, email, password,  createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
-        [firstName, lastName, email, hashedPassword, now ,now]
+        [firstName, lastName, email, hashedPassword, now, now],
       );
 
       const userId = result.insertId;

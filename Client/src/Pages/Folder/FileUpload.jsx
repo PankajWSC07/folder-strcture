@@ -101,7 +101,7 @@ function FileUpload({ parentId, onUploadSuccess }) {
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
       const resultAction = await dispatch(uploadFile({ file, parentId }));
-      
+
       if (!uploadFile.fulfilled.match(resultAction)) {
         setFileError(`Failed to upload ${file.name}`);
         return;
@@ -137,7 +137,7 @@ function FileUpload({ parentId, onUploadSuccess }) {
         onClick={() => setShowModal(true)}
         disabled={loading}
       >
-        📤
+        <i className="pi pi-upload"></i>
       </button>
 
       {showModal && (

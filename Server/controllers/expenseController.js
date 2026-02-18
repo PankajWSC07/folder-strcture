@@ -74,7 +74,7 @@ exports.createExpense = async (req, res) => {
           amount,
           date,
           description,
-          category, 
+          category,
           createdAt: new Date(),
         },
       });
