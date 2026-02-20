@@ -145,7 +145,7 @@ const validateFileExtension = (filename) => {
   return VALID_EXTENSIONS.hasOwnProperty(ext) ? ext : null;
 };
 
-  exports.createItem = async (req, res) => {
+exports.createItem = async (req, res) => {
   try {
     const { name, type, parentId } = req.body;
     const userId = req.userId;
@@ -185,9 +185,12 @@ const validateFileExtension = (filename) => {
           "SELECT rootFolderId FROM Items WHERE id = ?",
           [parentId],
         );
-        
+
         if (parentItem.length > 0) {
-          rootFolderId = parentItem[0].rootFolderId === 0 ? parentId : parentItem[0].rootFolderId;
+          rootFolderId =
+            parentItem[0].rootFolderId === 0
+              ? parentId
+              : parentItem[0].rootFolderId;
         }
       }
 
@@ -201,7 +204,16 @@ const validateFileExtension = (filename) => {
           const now = new Date().toISOString().slice(0, 19).replace("T", " ");
           const [result] = await connection.execute(
             "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [name, type, userId, parentId || null, rootFolderId, extension, now, now],
+            [
+              name,
+              type,
+              userId,
+              parentId || null,
+              rootFolderId,
+              extension,
+              now,
+              now,
+            ],
           );
 
           return res.status(201).json({
@@ -220,7 +232,6 @@ const validateFileExtension = (filename) => {
           });
         }
 
- 
         const [sharedFolder] = await connection.execute(
           `SELECT i.id, i.type, i.userId 
            FROM Items i
@@ -243,7 +254,16 @@ const validateFileExtension = (filename) => {
         const now = new Date().toISOString().slice(0, 19).replace("T", " ");
         const [result] = await connection.execute(
           "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [name, type, parentOwnerUserId, parentId || null, rootFolderId, extension, now, now],
+          [
+            name,
+            type,
+            parentOwnerUserId,
+            parentId || null,
+            rootFolderId,
+            extension,
+            now,
+            now,
+          ],
         );
 
         const newItemId = result.insertId;
@@ -253,7 +273,9 @@ const validateFileExtension = (filename) => {
         );
 
         if (userId !== parentOwnerUserId) {
-          console.log(` [createItem] Fetching creator's permissions on rootFolderId (${rootFolderId})...`);
+          console.log(
+            ` [createItem] Fetching creator's permissions on rootFolderId (${rootFolderId})...`,
+          );
           const [creatorPerms] = await connection.execute(
             `SELECT can_view, can_create, can_upload, can_edit, can_delete FROM Permissions 
              WHERE itemId = ? AND userId = ?`,
@@ -307,7 +329,16 @@ const validateFileExtension = (filename) => {
       const now = new Date().toISOString().slice(0, 19).replace("T", " ");
       const [result] = await connection.execute(
         "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [name, type, userId, parentId || null, rootFolderId, extension, now, now],
+        [
+          name,
+          type,
+          userId,
+          parentId || null,
+          rootFolderId,
+          extension,
+          now,
+          now,
+        ],
       );
 
       const newItemId = result.insertId;
@@ -334,130 +365,8 @@ const validateFileExtension = (filename) => {
     res.status(500).json({ message: "Error creating item" });
   }
 };
-  
-exports.getFolderStructure = async (req, res) => {
-  try {
-    const userId = req.userId;
-    const connection = await pool.getConnection();
 
-    try {
-      console.log(
-        ` [getFolderStructure] Fetching structure for user ${userId}`,
-      );
-
-      const query = `
-        SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId, 
-        u.firstName as creatorName,
-        NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
-        FROM Items i
-        JOIN Users u ON i.userId = u.id
-        WHERE i.parentId IS NULL AND (
-          i.userId = ? 
-          OR i.id IN (SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1)
-        )
-        
-        UNION ALL
-        
-        SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId, NULL as extension, f.createdAt, f.userId,
-        u.firstName as creatorName,
-        f.filePath, f.originalName, f.size, f.mimeType
-        FROM Files f
-        JOIN Users u ON f.userId = u.id
-        WHERE f.parentId IS NULL AND (
-          f.userId = ?
-          OR f.id IN (SELECT fileId FROM Permissions WHERE userId = ? AND can_view = 1)
-        )
-        
-        ORDER BY type DESC, name ASC
-      `;
-
-      const [items] = await connection.execute(query, [
-        userId,
-        userId,
-        userId,
-        userId,
-      ]);
-
-      // Fetch permissions for each item
-      const itemsWithPermissions = await Promise.all(
-        items.map(async (item) => {
-          const rootFolderId =
-            item.rootFolderId === 0 || item.rootFolderId === null
-              ? item.id
-              : item.rootFolderId;
-
-          const isOwner = item.userId === userId;
-
-          let permissionQuery;
-          let permissionParams;
-
-          if (isOwner) {
-            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                       FROM Permissions p
-                       JOIN Users u ON p.userId = u.id
-                       WHERE p.itemId = ?
-                       ORDER BY u.firstName, u.lastName`;
-            permissionParams = [rootFolderId];
-          } else {
-            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                       FROM Permissions p
-                       JOIN Users u ON p.userId = u.id
-                       WHERE p.itemId = ? AND p.userId = ?`;
-            permissionParams = [rootFolderId, userId];
-          }
-
-          try {
-            const [permissions] = await connection.execute(
-              permissionQuery,
-              permissionParams,
-            );
-
-            const convertedPermissions = permissions.map((p) => ({
-              ...p,
-              can_view: Boolean(p.can_view),
-              can_create: Boolean(p.can_create),
-              can_upload: Boolean(p.can_upload),
-              can_edit: Boolean(p.can_edit),
-              can_delete: Boolean(p.can_delete),
-            }));
-
-            return {
-              ...item,
-              permissions: convertedPermissions,
-            };
-          } catch (error) {
-            console.error(
-              ` Error fetching permissions for item ${item.id}:`,
-              error,
-            );
-            return {
-              ...item,
-              permissions: [],
-            };
-          }
-        }),
-      );
-
-      console.log(
-        ` [getFolderStructure] Returning ${itemsWithPermissions.length} root items for user ${userId}`,
-      );
-
-      res.status(200).json({
-        message: "Folder structure retrieved successfully",
-        data: itemsWithPermissions,
-      });
-    } finally {
-      connection.release();
-    }
-  } catch (error) {
-    console.error("Error fetching folder structure:", error);
-    res.status(500).json({ message: "Error fetching folder structure" });
-  }
-};
-
-exports.getItemsByParent = async (req, res) => {
+exports.getItems = async (req, res) => {
   try {
     const { parentId } = req.params;
     const userId = req.userId;
@@ -466,147 +375,96 @@ exports.getItemsByParent = async (req, res) => {
 
     try {
       if (!parentId || parentId === "null") {
-        console.log(
-          ` [getItemsByParent] Getting root items for user ${userId}`,
-        );
-
         const [rootItems] = await connection.execute(
           `
-          SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId,
-          u.firstName as creatorName,
-          NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
+          SELECT 
+            i.id, i.name, i.type, i.parentId, i.rootFolderId,
+            i.extension, i.createdAt, i.userId,
+            u.firstName AS creatorName,
+
+            IF(i.userId = ?, 1, IFNULL(p.can_view, 0))   AS can_view,
+            IF(i.userId = ?, 1, IFNULL(p.can_create, 0)) AS can_create,
+            IF(i.userId = ?, 1, IFNULL(p.can_upload, 0)) AS can_upload,
+            IF(i.userId = ?, 1, IFNULL(p.can_edit, 0))   AS can_edit,
+            IF(i.userId = ?, 1, IFNULL(p.can_delete, 0)) AS can_delete,
+
+            NULL AS filePath, NULL AS originalName,
+            NULL AS size, NULL AS mimeType
+
           FROM Items i
           JOIN Users u ON i.userId = u.id
-          WHERE i.parentId IS NULL AND (
-            i.userId = ? OR i.id IN (
-              SELECT itemId FROM Permissions WHERE userId = ? AND can_view = 1
-            )
-          )
+          LEFT JOIN Permissions p
+            ON p.itemId = i.id AND p.userId = ?
+
+          WHERE i.parentId IS NULL
+            AND (i.userId = ? OR p.can_view = 1)
+
           ORDER BY i.type DESC, i.name ASC
           `,
-          [userId, userId],
+          [userId, userId, userId, userId, userId, userId, userId],
         );
 
-        const [rootFiles] = await connection.execute(
-          `
-          SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId,
-          NULL as extension, f.createdAt, f.userId,
-          u.firstName as creatorName,
-          f.filePath, f.originalName, f.size, f.mimeType
-          FROM Files f
-          JOIN Users u ON f.userId = u.id
-          WHERE f.parentId IS NULL AND (
-            f.userId = ? OR f.id IN (
-              SELECT fileId FROM Permissions WHERE userId = ? AND can_view = 1
-            )
-          )
-          ORDER BY f.name ASC
-          `,
-          [userId, userId],
-        );
+        // const [rootFiles] = await connection.execute(
+        //   `
+        //   SELECT 
+        //     f.id, f.name, 'file' AS type, f.parentId, f.rootFolderId,
+        //     NULL AS extension, f.createdAt, f.userId,
+        //     u.firstName AS creatorName,
 
-        const data = [...rootItems, ...rootFiles];
+        //     IF(f.userId = ?, 1, IFNULL(p.can_view, 0))   AS can_view,
+        //     IF(f.userId = ?, 1, IFNULL(p.can_create, 0)) AS can_create,
+        //     IF(f.userId = ?, 1, IFNULL(p.can_upload, 0)) AS can_upload,
+        //     IF(f.userId = ?, 1, IFNULL(p.can_edit, 0))   AS can_edit,
+        //     IF(f.userId = ?, 1, IFNULL(p.can_delete, 0)) AS can_delete,
 
-        // Fetch permissions for each root item
-        const dataWithPermissions = await Promise.all(
-          data.map(async (item) => {
-            const rootFolderId =
-              item.rootFolderId === 0 || item.rootFolderId === null
-                ? item.id
-                : item.rootFolderId;
+        //     f.filePath, f.originalName, f.size, f.mimeType
 
-            const isOwner = item.userId === userId;
+        //   FROM Files f
+        //   JOIN Users u ON f.userId = u.id
+        //   LEFT JOIN Permissions p
+        //     ON p.fileId = f.id AND p.userId = ?
 
-            let permissionQuery;
-            let permissionParams;
+        //   WHERE f.parentId IS NULL
+        //     AND (f.userId = ? OR p.can_view = 1)
 
-            if (isOwner) {
-              permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                                p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                         FROM Permissions p
-                         JOIN Users u ON p.userId = u.id
-                         WHERE p.itemId = ?
-                         ORDER BY u.firstName, u.lastName`;
-              permissionParams = [rootFolderId];
-            } else {
-              permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                                p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                         FROM Permissions p
-                         JOIN Users u ON p.userId = u.id
-                         WHERE p.itemId = ? AND p.userId = ?`;
-              permissionParams = [rootFolderId, userId];
-            }
-
-            try {
-              const [permissions] = await connection.execute(
-                permissionQuery,
-                permissionParams,
-              );
-
-              const convertedPermissions = permissions.map((p) => ({
-                ...p,
-                can_view: Boolean(p.can_view),
-                can_create: Boolean(p.can_create),
-                can_upload: Boolean(p.can_upload),
-                can_edit: Boolean(p.can_edit),
-                can_delete: Boolean(p.can_delete),
-              }));
-
-              return {
-                ...item,
-                permissions: convertedPermissions,
-              };
-            } catch (error) {
-              console.error(
-                ` Error fetching permissions for item ${item.id}:`,
-                error,
-              );
-              return {
-                ...item,
-                permissions: [],
-              };
-            }
-          }),
-        );
+        //   ORDER BY f.name ASC
+        //   `,
+        //   [userId, userId, userId, userId, userId, userId, userId],
+        // );
 
         return res.status(200).json({
           message: "Root items retrieved successfully",
-          data: dataWithPermissions,
+          data: [...rootItems],
         });
       }
 
-      const accessQuery = `
-      WITH RECURSIVE folder_path AS (
-          SELECT id, parentId, userId
-          FROM Items
-          WHERE id = ?
+      const [access] = await connection.execute(
+        `
+        WITH RECURSIVE folder_path AS (
+            SELECT id, parentId, userId
+            FROM Items
+            WHERE id = ?
 
-          UNION ALL
+            UNION ALL
 
-          SELECT i.id, i.parentId, i.userId
-          FROM Items i
-          INNER JOIN folder_path fp ON fp.parentId = i.id
-      )
+            SELECT i.id, i.parentId, i.userId
+            FROM Items i
+            INNER JOIN folder_path fp ON fp.parentId = i.id
+        )
 
-      SELECT COUNT(*) as hasAccess
-      FROM folder_path fp
-      LEFT JOIN Permissions p 
-          ON p.itemId = fp.id 
-          AND p.userId = ?
-          AND p.can_view = 1
-      WHERE 
-          fp.userId = ?  -- owner
-          OR p.itemId IS NOT NULL
-      LIMIT 1;
-      `;
+        SELECT COUNT(*) AS hasAccess
+        FROM folder_path fp
+        LEFT JOIN Permissions p
+            ON p.itemId = fp.id
+            AND p.userId = ?
+            AND p.can_view = 1
+        WHERE fp.userId = ? OR p.itemId IS NOT NULL
+        LIMIT 1
+        `,
+        [parentId, userId, userId],
+      );
 
-      const [accessResult] = await connection.execute(accessQuery, [
-        parentId,
-        userId,
-        userId,
-      ]);
-
-      if (accessResult[0].hasAccess === 0) {
+      if (access[0].hasAccess === 0) {
         return res.status(403).json({
           message: "Access denied to this folder",
         });
@@ -614,103 +472,81 @@ exports.getItemsByParent = async (req, res) => {
 
       const [items] = await connection.execute(
         `
-        SELECT i.id, i.name, i.type, i.parentId, i.rootFolderId, i.extension, i.createdAt, i.userId,
-        u.firstName as creatorName,
-        NULL as filePath, NULL as originalName, NULL as size, NULL as mimeType
+        SELECT 
+          i.id, i.name, i.type, i.parentId, i.rootFolderId,
+          i.extension, i.createdAt, i.userId,
+          u.firstName AS creatorName,
+
+          IF(i.userId = ?, 1, IFNULL(rp.can_view, 0))   AS can_view,
+          IF(i.userId = ?, 1, IFNULL(rp.can_create, 0)) AS can_create,
+          IF(i.userId = ?, 1, IFNULL(rp.can_upload, 0)) AS can_upload,
+          IF(i.userId = ?, 1, IFNULL(rp.can_edit, 0))   AS can_edit,
+          IF(i.userId = ?, 1, IFNULL(rp.can_delete, 0)) AS can_delete,
+
+          NULL AS filePath, NULL AS originalName,
+          NULL AS size, NULL AS mimeType
+
         FROM Items i
         JOIN Users u ON i.userId = u.id
+
+        LEFT JOIN Permissions rp
+          ON rp.itemId =
+            CASE
+              WHEN i.rootFolderId IS NULL OR i.rootFolderId = 0
+              THEN i.id
+              ELSE i.rootFolderId
+            END
+          AND rp.userId = ?
+
         WHERE i.parentId = ?
+
         ORDER BY i.type DESC, i.name ASC
         `,
-        [parentId],
+        [userId, userId, userId, userId, userId, userId, parentId],
       );
 
       const [files] = await connection.execute(
         `
-        SELECT f.id, f.name, 'file' as type, f.parentId, f.rootFolderId,
-        NULL as extension, f.createdAt, f.userId,
-        u.firstName as creatorName,
-        f.filePath, f.originalName, f.size, f.mimeType
+        SELECT 
+          f.id, f.name, 'file' AS type, f.parentId, f.rootFolderId,
+          NULL AS extension, f.createdAt, f.userId,
+          u.firstName AS creatorName,
+
+          IF(f.userId = ?, 1, IFNULL(rp.can_view, 0))   AS can_view,
+          IF(f.userId = ?, 1, IFNULL(rp.can_create, 0)) AS can_create,
+          IF(f.userId = ?, 1, IFNULL(rp.can_upload, 0)) AS can_upload,
+          IF(f.userId = ?, 1, IFNULL(rp.can_edit, 0))   AS can_edit,
+          IF(f.userId = ?, 1, IFNULL(rp.can_delete, 0)) AS can_delete,
+
+          f.filePath, f.originalName, f.size, f.mimeType
+
         FROM Files f
         JOIN Users u ON f.userId = u.id
+
+        LEFT JOIN Permissions rp
+          ON rp.itemId =
+            CASE
+              WHEN f.rootFolderId IS NULL OR f.rootFolderId = 0
+              THEN f.id
+              ELSE f.rootFolderId
+            END
+          AND rp.userId = ?
+
         WHERE f.parentId = ?
+
         ORDER BY f.name ASC
         `,
-        [parentId],
+        [userId, userId, userId, userId, userId, userId, parentId],
       );
 
       const data = [...items, ...files].sort((a, b) => {
-        if (a.type === b.type) {
-          return a.name.localeCompare(b.name);
-        }
+        if (a.type === b.type) return a.name.localeCompare(b.name);
         return a.type === "folder" ? -1 : 1;
       });
 
-      // Fetch permissions for each item
-      const dataWithPermissions = await Promise.all(
-        data.map(async (item) => {
-          const rootFolderId =
-            item.rootFolderId === 0 || item.rootFolderId === null
-              ? item.id
-              : item.rootFolderId;
-
-          const isOwner = item.userId === userId;
-
-          let permissionQuery;
-          let permissionParams;
-
-          if (isOwner) {
-            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                       FROM Permissions p
-                       JOIN Users u ON p.userId = u.id
-                       WHERE p.itemId = ?
-                       ORDER BY u.firstName, u.lastName`;
-            permissionParams = [rootFolderId];
-          } else {
-            permissionQuery = `SELECT p.id, p.userId, u.firstName, u.lastName, u.email,
-                              p.can_view, p.can_create, p.can_upload, p.can_edit, p.can_delete
-                       FROM Permissions p
-                       JOIN Users u ON p.userId = u.id
-                       WHERE p.itemId = ? AND p.userId = ?`;
-            permissionParams = [rootFolderId, userId];
-          }
-
-          try {
-            const [permissions] = await connection.execute(
-              permissionQuery,
-              permissionParams,
-            );
-
-            const convertedPermissions = permissions.map((p) => ({
-              ...p,
-              can_view: Boolean(p.can_view),
-              can_create: Boolean(p.can_create),
-              can_upload: Boolean(p.can_upload),
-              can_edit: Boolean(p.can_edit),
-              can_delete: Boolean(p.can_delete),
-            }));
-
-            return {
-              ...item,
-              permissions: convertedPermissions,
-            };
-          } catch (error) {
-            console.error(
-              ` Error fetching permissions for item ${item.id}:`,
-              error,
-            );
-            return {
-              ...item,
-              permissions: [],
-            };
-          }
-        }),
-      );
-
       res.status(200).json({
         message: "Items retrieved successfully",
-        data: dataWithPermissions,
+        data,
       });
     } finally {
       connection.release();

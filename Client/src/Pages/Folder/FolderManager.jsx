@@ -85,35 +85,18 @@ function FolderManager() {
   }, [fileSuccess, dispatch, parentToRefresh]);
 
   useEffect(() => {
-    // Extract permissions from folders and child items that come with the structure API
     const extractPermissionsFromData = () => {
       const permissionsMap = {};
 
       const processItem = (item) => {
         if (item && item.id) {
-          if (item.permissions && Array.isArray(item.permissions)) {
-            const currentUserPermission = item.permissions.find(
-              (p) => p.userId === currentUserId,
-            );
-
-            if (currentUserPermission) {
-              permissionsMap[item.id] = {
-                can_create: Boolean(currentUserPermission.can_create),
-                can_upload: Boolean(currentUserPermission.can_upload),
-                can_edit: Boolean(currentUserPermission.can_edit),
-                can_delete: Boolean(currentUserPermission.can_delete),
-                can_view: Boolean(currentUserPermission.can_view),
-              };
-            } else {
-              permissionsMap[item.id] = {
-                can_create: false,
-                can_upload: false,
-                can_edit: false,
-                can_delete: false,
-                can_view: false,
-              };
-            }
-          }
+          permissionsMap[item.id] = {
+            can_create: Boolean(item.can_create),
+            can_upload: Boolean(item.can_upload),
+            can_edit: Boolean(item.can_edit),
+            can_delete: Boolean(item.can_delete),
+            can_view: Boolean(item.can_view),
+          };
         }
       };
 
@@ -143,7 +126,10 @@ function FolderManager() {
       setItemPermissions(permissionsMap);
     };
 
-    if (currentUserId && (folders.length > 0 || Object.keys(childrenMap).length > 0)) {
+    if (
+      currentUserId &&
+      (folders.length > 0 || Object.keys(childrenMap).length > 0)
+    ) {
       extractPermissionsFromData();
     }
   }, [folders, currentUserId, childrenMap, filesMap]);
@@ -436,10 +422,9 @@ function FolderManager() {
             >
               {folder.name}
             </span>
-             
+
             <div className="folder-inline-actions">
-              <span className="mt-2 mr-4">{folder.creatorName || "NA"}</span>
-              <span className="mt-2 mr-4">{`${CreateDate || "NA"}`}</span>
+              <span className="mt-2 mr-4">{`${CreateDate || "NA"} - ${folder.creatorName || "NA"}`}</span>
 
               {isOwner && (
                 <button
@@ -580,8 +565,14 @@ function FolderManager() {
 
   const handleReloadFolders = () => {
     dispatch(fetchFolderStructure());
-  };
 
+    Object.keys(openFolders).forEach((folderId) => {
+      if (openFolders[folderId]) {
+        dispatch(fetchFolderChildren(folderId));
+      }
+    });
+  };
+  
   return (
     <div className="folder-manager">
       <div className="folder-manager-header">

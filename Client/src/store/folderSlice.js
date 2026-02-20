@@ -15,7 +15,7 @@ export const fetchFolderStructure = createAsyncThunk(
         return rejectWithValue("No authentication token found");
       }
 
-      const response = await axios.get(`${API_URL}/structure`, {
+      const response = await axios.get(`${API_URL}/items`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

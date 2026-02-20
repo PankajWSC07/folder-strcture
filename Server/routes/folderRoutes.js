@@ -3,18 +3,16 @@ const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 const {
   createItem,
-  getFolderStructure,
-  getItemsByParent,
+  getItems,
   deleteItem,
   renameItem,
 } = require("../controllers/folderController");
 
 router.use(authMiddleware);
 router.post("/create", createItem);
-router.get("/structure", getFolderStructure);
-router.get("/items/:parentId", getItemsByParent);
-router.get("/items", getItemsByParent);
-router.delete("/:itemId", deleteItem);
+router.get("/items", getItems);
+router.get("/items/:parentId", getItems);
 router.put("/:itemId/rename", renameItem);
+router.delete("/:itemId", deleteItem);
 
 module.exports = router;

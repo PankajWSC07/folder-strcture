@@ -180,7 +180,6 @@ function PermissionModal({ itemId, itemName, isOwner = false, onClose }) {
               <h3>{isOwner ? "Users" : "Your Permissions"}</h3>
 
               {!isOwner && currentUser ? (
-                // Non-owner view: show only their own permissions (read-only)
                 <div className="permission-user-row">
                   <div className="user-info">
                     <div className="user-name">
@@ -219,7 +218,6 @@ function PermissionModal({ itemId, itemName, isOwner = false, onClose }) {
                   </div>
                 </div>
               ) : isOwner ? (
-                // Owner view: show all users with editable checkboxes
                 availableUsers.length === 0 ? (
                   <p className="no-users">No other users available</p>
                 ) : (

@@ -13,32 +13,25 @@ function ImagePreviewModal({ file, onClose }) {
   const getImageUrl = () => {
     if (file.filePath) {
       if (file.filePath.startsWith("/uploads")) {
-        return `http://localhost:5000${file.filePath}`; 
+        return `http://localhost:5000${file.filePath}`;
       }
       return file.filePath;
     }
     return "";
   };
-  
+
   console.log(`http://localhost:5000${file.filePath}`);
-  
+
   const handleDownload = () => {
     dispatch(downloadFile({ fileId: file.id, fileName: file.originalName }));
   };
 
   return (
     <div className="image-preview-overlay" onClick={onClose}>
-      <div
-        className="image-preview-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="image-preview-modal" onClick={(e) => e.stopPropagation()}>
         <div className="image-preview-header">
           <h3>{file.originalName}</h3>
-          <button
-            className="close-btn"
-            onClick={onClose}
-            title="Close"
-          >
+          <button className="close-btn" onClick={onClose} title="Close">
             ✕
           </button>
         </div>
@@ -73,23 +66,19 @@ function ImagePreviewModal({ file, onClose }) {
           <div className="info-item">
             <span className="info-label">Uploaded:</span>
             <span className="info-value">
-              {new Date(file.createdAt).toLocaleDateString()} {new Date(file.createdAt).toLocaleTimeString()}
+              {new Date(file.createdAt).toLocaleDateString()}{" "}
+              {new Date(file.createdAt).toLocaleTimeString()}
             </span>
           </div>
         </div>
 
         <div className="image-preview-actions">
-          <button
-            className="btn btn-cancel"
-            onClick={onClose}
-          >
+          <button className="btn btn-cancel" onClick={onClose}>
             Close
           </button>
-          <button
-            className="btn btn-download"
-            onClick={handleDownload}
-          >
-            📥 Download
+          <button className="btn btn-download" onClick={handleDownload}>
+            <i className="pi pi-download pr-1.5"></i>
+            Download
           </button>
         </div>
       </div>
