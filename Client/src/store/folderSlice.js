@@ -229,7 +229,6 @@ const folderSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Fetch folder children
     builder
       .addCase(fetchFolderChildren.pending, (state) => {
         state.error = null;

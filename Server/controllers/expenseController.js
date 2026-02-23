@@ -1,6 +1,5 @@
 const { pool } = require("../config/db");
 
-// Get all expenses for authenticated user
 exports.getAllExpenses = async (req, res) => {
   try {
     const connection = await pool.getConnection();
@@ -42,7 +41,6 @@ exports.createExpense = async (req, res) => {
   try {
     const { amount, date, description, category } = req.body;
 
-    // Validation
     if (!amount || !date || !description || !category) {
       return res.status(400).json({
         message: "Amount, date, description, and category are required",
@@ -98,7 +96,6 @@ exports.updateExpense = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if expense exists and belongs to user
       const [existingExpenses] = await connection.execute(
         "SELECT id, amount, date, description, category FROM Expenses WHERE id = ? AND userId = ?",
         [id, req.userId],
@@ -108,7 +105,6 @@ exports.updateExpense = async (req, res) => {
         return res.status(404).json({ message: "Expense not found" });
       }
 
-      // Build update query
       const updates = [];
       const values = [];
 
@@ -148,7 +144,6 @@ exports.updateExpense = async (req, res) => {
       const query = `UPDATE Expenses SET ${updates.join(", ")} WHERE id = ? AND userId = ?`;
       await connection.execute(query, values);
 
-      // Fetch updated expense
       const [updatedExpenses] = await connection.execute(
         "SELECT id, amount, date, description, category, createdAt FROM Expenses WHERE id = ?",
         [id],
@@ -178,7 +173,6 @@ exports.updateExpense = async (req, res) => {
   }
 };
 
-// Delete expense
 exports.deleteExpense = async (req, res) => {
   try {
     const { id } = req.params;
@@ -186,7 +180,6 @@ exports.deleteExpense = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if expense exists and belongs to user
       const [expenses] = await connection.execute(
         "SELECT id FROM Expenses WHERE id = ? AND userId = ?",
         [id, req.userId],

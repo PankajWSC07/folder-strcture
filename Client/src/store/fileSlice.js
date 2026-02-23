@@ -4,7 +4,6 @@ import Cookies from "js-cookie";
 
 const API_URL = "http://localhost:5000/api/files";
 
-// Get token
 const getToken = () => Cookies.get("token");
 
 // Upload file
@@ -40,7 +39,7 @@ export const uploadFile = createAsyncThunk(
   },
 );
 
-// Fetch files by parent ID
+
 export const fetchFilesByParent = createAsyncThunk(
   "file/fetchFilesByParent",
   async (parentId, { rejectWithValue }) => {
@@ -194,12 +193,10 @@ const fileSlice = createSlice({
         const uploadedFile = action.payload;
         const parentId = uploadedFile.parentId || null;
 
-        // Ensure filesMap[parentId] exists
         if (!state.filesMap[parentId]) {
           state.filesMap[parentId] = [];
         }
 
-        // Add the uploaded file to the correct parent
         state.filesMap[parentId].push(uploadedFile);
       })
       .addCase(uploadFile.rejected, (state, action) => {
@@ -208,7 +205,6 @@ const fileSlice = createSlice({
         state.uploadProgress = 0;
       });
 
-    // Fetch files by parent
     builder
       .addCase(fetchFilesByParent.pending, (state) => {
         state.loading = true;
@@ -244,7 +240,6 @@ const fileSlice = createSlice({
         state.error = action.payload;
       });
 
-    // Fetch all files
     builder
       .addCase(fetchAllFiles.pending, (state) => {
         state.loading = true;

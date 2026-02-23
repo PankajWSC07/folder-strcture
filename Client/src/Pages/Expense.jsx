@@ -35,7 +35,6 @@ function Expense() {
     category: "",
   });
 
-  // For field-level errors
   const [errors, setErrors] = useState({});
 
   const expenseCategories = [

@@ -52,7 +52,6 @@ function Login() {
       [name]: value,
     }));
 
-    // Clear error on field change
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -69,7 +68,6 @@ function Login() {
     dispatch(loginUser(formData));
   };
 
-  // Handle login success
   useEffect(() => {
     if (isAuthenticated) {
       toast.current?.show({
@@ -79,20 +77,17 @@ function Login() {
         life: 3000,
       });
 
-      // Reset form
       setFormData({
         email: "",
         password: "",
       });
 
-      // Redirect to dashboard
       setTimeout(() => {
         navigate("/dashboard");
       }, 1000);
     }
   }, [isAuthenticated, navigate]);
 
-  // Handle login error
   useEffect(() => {
     if (error) {
       toast.current?.show({

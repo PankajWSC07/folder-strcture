@@ -48,7 +48,6 @@ function ResetPassword() {
       [name]: value,
     }));
 
-    // Clear error on field change
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -82,7 +81,6 @@ function ResetPassword() {
     );
   };
 
-  // Handle success
   useEffect(() => {
     if (submitted && !isLoading && !error) {
       toast.current?.show({
@@ -98,7 +96,6 @@ function ResetPassword() {
     }
   }, [submitted, isLoading, error, navigate]);
 
-  // Handle error
   useEffect(() => {
     if (error) {
       toast.current?.show({
@@ -112,7 +109,6 @@ function ResetPassword() {
     }
   }, [error, dispatch]);
 
-  // Validate token on mount
   useEffect(() => {
     if (!token) {
       toast.current?.show({

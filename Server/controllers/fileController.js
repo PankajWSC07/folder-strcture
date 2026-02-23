@@ -86,9 +86,28 @@ exports.uploadFile = async (req, res) => {
       const filePath = `/uploads/${file.filename}`;
       const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-      const [fileResult] = await connection.execute(
-        "INSERT INTO Files (name, filePath, originalName, size, mimeType, userId, parentId, rootFolderId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      const fileExtension = file.originalname.substring(file.originalname.lastIndexOf('.')).toLowerCase();
+
+      const [itemResult] = await connection.execute(
+        "INSERT INTO Items (name, type, userId, parentId, rootFolderId, extension, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
+          file.originalname,
+          'file',
+          userId,
+          parentId || null,
+          rootFolderId,
+          fileExtension,
+          now,
+          now,
+        ],
+      );
+
+      const itemId = itemResult.insertId;
+
+      const [fileResult] = await connection.execute(
+        "INSERT INTO Files (id, name, filePath, originalName, size, mimeType, userId, parentId, rootFolderId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          itemId, 
           file.filename,
           filePath,
           file.originalname,
@@ -102,8 +121,6 @@ exports.uploadFile = async (req, res) => {
         ],
       );
 
-      const fileId = fileResult.insertId;
-
       if (parentId) {
         const [parentItem] = await connection.execute(
           "SELECT userId FROM Items WHERE id = ?",
@@ -111,8 +128,7 @@ exports.uploadFile = async (req, res) => {
         );
 
         if (parentItem.length > 0 && parentItem[0].userId !== userId) {
-          // Parent owner is different from uploader
-          // Grant parent owner full permissions (since it's their folder)
+    
           console.log(` [uploadFile] Auto-granting parent owner (${parentItem[0].userId}) full permissions on rootFolderId (${rootFolderId})`);
           await connection.execute(
             `INSERT INTO Permissions (itemId, userId, can_view, can_create, can_upload, can_edit, can_delete)
@@ -121,7 +137,6 @@ exports.uploadFile = async (req, res) => {
             [rootFolderId, parentItem[0].userId],
           );
           
-          // Grant uploader the SAME permissions they have on root folder
           console.log(` [uploadFile] Fetching uploader's permissions on rootFolderId (${rootFolderId})...`);
           const [uploaderPerms] = await connection.execute(
             `SELECT can_view, can_create, can_upload, can_edit, can_delete FROM Permissions 
@@ -158,10 +173,17 @@ exports.uploadFile = async (req, res) => {
         }
       }
 
+      const [userResult] = await connection.execute(
+        "SELECT firstName FROM Users WHERE id = ?",
+        [userId],
+      );
+
+      const creatorName = userResult.length > 0 ? userResult[0].firstName : "Unknown";
+
       res.status(201).json({
         message: "File uploaded successfully",
         file: {
-          id: fileId,
+          id: itemId,
           name: file.originalname,
           filePath: filePath,
           size: file.size,
@@ -169,6 +191,10 @@ exports.uploadFile = async (req, res) => {
           userId: userId,
           parentId: parentId || null,
           createdAt: now,
+          creatorName: creatorName,
+          originalName: file.originalname,
+          type: 'file',
+          extension: fileExtension,
         },
       });
     } catch (error) {
@@ -186,7 +212,6 @@ exports.uploadFile = async (req, res) => {
   }
 };
 
-// Get files by parent ID
 exports.getFilesByParent = async (req, res) => {
   try {
     const { parentId } = req.params;
@@ -194,7 +219,9 @@ exports.getFilesByParent = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      let query = "SELECT f.* FROM Files f WHERE f.userId = ?";
+      let query = `SELECT f.*, u.firstName AS creatorName FROM Files f 
+        LEFT JOIN Users u ON f.userId = u.id 
+        WHERE f.userId = ?`;
       const params = [userId];
 
       if (parentId && parentId !== "null") {
@@ -220,7 +247,6 @@ exports.getFilesByParent = async (req, res) => {
   }
 };
 
-// Get all files for logged-in user
 exports.getAllFiles = async (req, res) => {
   try {
     const userId = req.userId;
@@ -228,7 +254,7 @@ exports.getAllFiles = async (req, res) => {
 
     try {
       const [files] = await connection.execute(
-        "SELECT f.* FROM Files f WHERE f.userId = ? ORDER BY f.createdAt DESC",
+        "SELECT f.*, u.firstName AS creatorName FROM Files f LEFT JOIN Users u ON f.userId = u.id WHERE f.userId = ? ORDER BY f.createdAt DESC",
         [userId],
       );
 
@@ -254,6 +280,73 @@ exports.deleteFile = async (req, res) => {
 
     try {
       await connection.beginTransaction();
+
+      const [itemFiles] = await connection.execute(
+        `SELECT i.id, i.userId, i.parentId, i.rootFolderId FROM Items i 
+         WHERE i.id = ? AND i.type = 'file'`,
+        [fileId],
+      );
+
+      if (itemFiles.length > 0) {
+        const item = itemFiles[0];
+        const rootFolderId = item.rootFolderId === 0 || item.rootFolderId === null 
+          ? item.parentId 
+          : item.rootFolderId;
+
+        let isAuthorized = item.userId === userId; 
+
+        if (!isAuthorized && item.parentId) {
+          const [parentOwner] = await connection.execute(
+            `SELECT userId FROM Items WHERE id = ?`,
+            [item.parentId],
+          );
+          if (parentOwner.length > 0 && parentOwner[0].userId === userId) {
+            isAuthorized = true;
+          }
+        }
+
+        if (!isAuthorized && rootFolderId) {
+          const [perm] = await connection.execute(
+            `SELECT 1 FROM Permissions WHERE itemId = ? AND userId = ? AND can_delete = 1`,
+            [rootFolderId, userId],
+          );
+          isAuthorized = perm.length > 0;
+        }
+
+        if (!isAuthorized) {
+          console.log(` [deleteFile] User ${userId} not authorized to delete file ${fileId}`);
+          await connection.rollback();
+          return res.status(403).json({ message: "You do not have permission to delete this file" });
+        }
+
+        console.log(` [deleteFile] Deleting item file ${fileId} by user ${userId}`);
+        
+        const [filesData] = await connection.execute(
+          `SELECT filePath FROM Files WHERE id = ?`,
+          [fileId],
+        );
+
+        await connection.execute(
+          "DELETE FROM Files WHERE id = ?",
+          [fileId],
+        );
+
+        await connection.execute(
+          "DELETE FROM Items WHERE id = ?",
+          [fileId],
+        );
+
+        if (filesData.length > 0) {
+          const filePath = path.join(uploadsDir, path.basename(filesData[0].filePath));
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(` [deleteFile] Deleted file from disk: ${filePath}`);
+          }
+        }
+
+        await connection.commit();
+        return res.status(200).json({ message: "File deleted successfully" });
+      }
 
       const [uploadedFiles] = await connection.execute(
         `SELECT f.id, f.filePath, f.userId, f.parentId, f.rootFolderId FROM Files f 
@@ -298,58 +391,11 @@ exports.deleteFile = async (req, res) => {
 
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
+          console.log(` [deleteFile] Deleted file from disk: ${filePath}`);
         }
 
         await connection.execute(
           "DELETE FROM Files WHERE id = ?",
-          [fileId],
-        );
-
-        await connection.commit();
-        return res.status(200).json({ message: "File deleted successfully" });
-      }
-
-      const [itemFiles] = await connection.execute(
-        `SELECT i.id, i.userId, i.parentId, i.rootFolderId FROM Items i 
-         WHERE i.id = ? AND i.type = 'file'`,
-        [fileId],
-      );
-
-      if (itemFiles.length > 0) {
-        const file = itemFiles[0];
-        const rootFolderId = file.rootFolderId === 0 || file.rootFolderId === null 
-          ? file.parentId 
-          : file.rootFolderId;
-
-        let isAuthorized = file.userId === userId; 
-
-        if (!isAuthorized && file.parentId) {
-          const [parentOwner] = await connection.execute(
-            `SELECT userId FROM Items WHERE id = ?`,
-            [file.parentId],
-          );
-          if (parentOwner.length > 0 && parentOwner[0].userId === userId) {
-            isAuthorized = true;
-          }
-        }
-
-        if (!isAuthorized && rootFolderId) {
-          const [perm] = await connection.execute(
-            `SELECT 1 FROM Permissions WHERE itemId = ? AND userId = ? AND can_delete = 1`,
-            [rootFolderId, userId],
-          );
-          isAuthorized = perm.length > 0;
-        }
-
-        if (!isAuthorized) {
-          console.log(` [deleteFile] User ${userId} not authorized to delete file ${fileId}`);
-          await connection.rollback();
-          return res.status(403).json({ message: "You do not have permission to delete this file" });
-        }
-
-        console.log(` [deleteFile] Deleting item file ${fileId} by user ${userId}`);
-        await connection.execute(
-          "DELETE FROM Items WHERE id = ?",
           [fileId],
         );
 
@@ -439,7 +485,6 @@ exports.downloadFile = async (req, res) => {
       );
       res.setHeader("Content-Type", "application/octet-stream");
 
-      // Send file
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
 

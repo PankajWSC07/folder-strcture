@@ -1,6 +1,6 @@
 const { pool } = require("../config/db");
 
-// Get all todos for authenticated user
+// Get all todos 
 exports.getAllTodos = async (req, res) => {
   try {
     const connection = await pool.getConnection();
@@ -35,7 +35,6 @@ exports.createTodo = async (req, res) => {
   try {
     const { todo, description, date } = req.body;
 
-    // Validation
     if (!todo || !date) {
       return res
         .status(400)
@@ -45,7 +44,6 @@ exports.createTodo = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Convert ISO date to MySQL DATETIME format
       const dateObj = new Date(date);
       const mysqlDate = dateObj.toISOString().slice(0, 19).replace('T', ' ');
       const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -65,7 +63,7 @@ exports.createTodo = async (req, res) => {
           description: description || "",
           date,
           status: "pending",
-          createdAt: new Date(),
+          createdAt: now,
         },
       });
     } finally {
@@ -99,7 +97,6 @@ exports.updateTodo = async (req, res) => {
 
       const existingTodo = existingTodos[0];
 
-      // Build update query
       const updates = [];
       const values = [];
 
@@ -134,7 +131,6 @@ exports.updateTodo = async (req, res) => {
       const query = `UPDATE Todos SET ${updates.join(", ")} WHERE id = ? AND userId = ?`;
       await connection.execute(query, values);
 
-      // Fetch updated todo
       const [updatedTodos] = await connection.execute(
         "SELECT id, todo, description, date, status, createdAt FROM Todos WHERE id = ?",
         [id]

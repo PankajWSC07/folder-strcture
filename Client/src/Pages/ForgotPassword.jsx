@@ -40,7 +40,6 @@ function ForgotPassword() {
     const { value } = e.target;
     setEmail(value);
 
-    // Clear error on field change
     if (errors.email) {
       setErrors((prev) => ({
         ...prev,
@@ -58,7 +57,6 @@ function ForgotPassword() {
     dispatch(forgotPassword(email));
   };
 
-  // Handle success
   useEffect(() => {
     if (submitted && !isLoading && !error) {
       toast.current?.show({
@@ -74,7 +72,6 @@ function ForgotPassword() {
     }
   }, [submitted, isLoading, error, navigate]);
 
-  // Handle error
   useEffect(() => {
     if (error) {
       toast.current?.show({
@@ -87,7 +84,6 @@ function ForgotPassword() {
     }
   }, [error, dispatch]);
 
-  // Track when submit button is clicked
   useEffect(() => {
     if (!isLoading && submitted && !error) {
       setSubmitted(false);

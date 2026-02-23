@@ -10,10 +10,9 @@ export const registerUser = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       const response = await axios.post(`${API_URL}/register`, userData);
-      // Store token in secure cookie
       Cookies.set("token", response.data.token, {
         expires: 7,
-        secure: false, // Set to true in production with HTTPS
+        secure: false,
         sameSite: "Lax",
       });
       return response.data;
@@ -31,10 +30,9 @@ export const loginUser = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const response = await axios.post(`${API_URL}/login`, credentials);
-      // Store token in secure cookie
       Cookies.set("token", response.data.token, {
         expires: 7,
-        secure: false, // Set to true in production with HTTPS
+        secure: false, 
         sameSite: "Lax",
       });
       return response.data;
@@ -285,7 +283,6 @@ const authSlice = createSlice({
       .addCase(updateUser.fulfilled, (state, action) => {
         state.isLoading = false;
         state.error = null;
-        // Update user in users array
         const index = state.users.findIndex((u) => u.id === action.payload.user.id);
         if (index !== -1) {
           state.users[index] = action.payload.user;
@@ -305,7 +302,6 @@ const authSlice = createSlice({
       .addCase(deleteUser.fulfilled, (state, action) => {
         state.isLoading = false;
         state.error = null;
-        // Remove deleted user from array
         state.users = state.users.filter((u) => u.id !== action.meta.arg);
       })
       .addCase(deleteUser.rejected, (state, action) => {

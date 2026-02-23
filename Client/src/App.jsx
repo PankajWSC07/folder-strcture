@@ -30,7 +30,6 @@ function App() {
   const isForgotPasswordPage = location.pathname === "/forgot-password";
   const isResetPasswordPage = location.pathname.startsWith("/reset-password");
 
-  // Restore user data on page refresh if token exists in cookies
   useEffect(() => {
     const token = Cookies.get("token");
     if (token && isAuthenticated && !user) {

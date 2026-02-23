@@ -6,7 +6,6 @@ import { Badge } from "primereact/badge";
 import { getAllTodos } from "../store/todoSlice";
 import { getAllExpenses } from "../store/expenseSlice";
 import { useEffect } from "react";
-// import { Chart } from "primereact/chart";
 
 function Dashboard() {
   const dispatch = useDispatch();

@@ -89,7 +89,6 @@ function Register() {
     dispatch(registerUser(userData));
   };
 
-  // Handle registration success
   useEffect(() => {
     if (isAuthenticated) {
       toast.current?.show({
@@ -99,7 +98,6 @@ function Register() {
         life: 3000,
       });
 
-      // Reset form
       setFormData({
         firstName: "",
         lastName: "",
@@ -108,14 +106,12 @@ function Register() {
         confirmPassword: "",
       });
 
-      // Redirect to dashboard
       setTimeout(() => {
         navigate("/dashboard");
       }, 1000);
     }
   }, [isAuthenticated, navigate]);
 
-  // Handle registration error
   useEffect(() => {
     if (error) {
       toast.current?.show({

@@ -11,6 +11,7 @@ import {
 import {
   deleteFile,
   downloadFile,
+  uploadFile,
   clearSuccess as clearFileSuccess,
 } from "../../store/fileSlice";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -45,6 +46,9 @@ function FolderManager() {
   const [selectedItemForPermission, setSelectedItemForPermission] =
     useState(null);
   const [itemPermissions, setItemPermissions] = useState({});
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [customFileName, setCustomFileName] = useState("");
+  const [fileUploadError, setFileUploadError] = useState(null);
 
   useEffect(() => {
     dispatch(fetchFolderStructure());
@@ -100,12 +104,10 @@ function FolderManager() {
         }
       };
 
-      // Process root folders
       folders.forEach((folder) => {
         processItem(folder);
       });
 
-      // Process children
       Object.values(childrenMap).forEach((children) => {
         if (Array.isArray(children)) {
           children.forEach((child) => {
@@ -114,7 +116,6 @@ function FolderManager() {
         }
       });
 
-      // Process files
       Object.values(filesMap).forEach((files) => {
         if (Array.isArray(files)) {
           files.forEach((file) => {
@@ -189,39 +190,84 @@ function FolderManager() {
     setParentIdForCreate(parentId);
     setCreateType("folder");
     setNewItemName("");
+    setSelectedFile(null);
+    setCustomFileName("");
+    setFileUploadError(null);
     setShowCreateModal(true);
     setExpandedMenu(null);
   };
 
-  const handleCreateSubmit = () => {
-    if (!newItemName.trim()) {
-      alert("Please enter a name");
-      return;
-    }
+  const handleCreateSubmit = async () => {
+    if (createType === "folder") {
+      if (!newItemName.trim()) {
+        alert("Please enter a name");
+        return;
+      }
 
-    console.log("Creating item:", {
-      name: newItemName,
-      type: createType,
-      parentId: parentIdForCreate,
-    });
-
-    if (parentIdForCreate) {
-      setParentToRefresh(parentIdForCreate);
-    } else {
-      setParentToRefresh("root");
-    }
-
-    dispatch(
-      createItem({
+      console.log("Creating item:", {
         name: newItemName,
         type: createType,
         parentId: parentIdForCreate,
-      }),
-    );
+      });
 
-    setShowCreateModal(false);
-    setNewItemName("");
-    setParentIdForCreate(null);
+      if (parentIdForCreate) {
+        setParentToRefresh(parentIdForCreate);
+      } else {
+        setParentToRefresh("root");
+      }
+
+      dispatch(
+        createItem({
+          name: newItemName,
+          type: createType,
+          parentId: parentIdForCreate,
+        }),
+      );
+
+      setShowCreateModal(false);
+      setNewItemName("");
+      setParentIdForCreate(null);
+    } else if (createType === "file") {
+      if (!selectedFile) {
+        setFileUploadError("Please select a file");
+        return;
+      }
+
+      if (!customFileName.trim()) {
+        setFileUploadError("Please enter a file name");
+        return;
+      }
+
+      try {
+        const renamedFile = new File([selectedFile], customFileName, {
+          type: selectedFile.type,
+        });
+
+        const resultAction = await dispatch(
+          uploadFile({ file: renamedFile, parentId: parentIdForCreate }),
+        );
+
+        if (uploadFile.fulfilled.match(resultAction)) {
+          console.log("File uploaded successfully:", resultAction.payload);
+
+          const parentToRefreshId = parentIdForCreate || "root";
+          setParentToRefresh(parentToRefreshId);
+
+          setShowCreateModal(false);
+          setSelectedFile(null);
+          setCustomFileName("");
+          setFileUploadError(null);
+          setParentIdForCreate(null);
+        } else {
+          setFileUploadError(
+            resultAction.payload || "Failed to upload file",
+          );
+        }
+      } catch (error) {
+        console.error("File upload error:", error);
+        setFileUploadError(error.message || "Error uploading file");
+      }
+    }
   };
 
   const handleDeleteClick = (itemId) => {
@@ -384,8 +430,7 @@ function FolderManager() {
     const canUpload = isOwner || Boolean(folderPerms.can_upload);
     const canEdit = isOwner || Boolean(folderPerms.can_edit);
     const canDelete = isOwner || Boolean(folderPerms.can_delete);
-    const name = folderPerms?.firstName ? folderPerms.firstName : "NA";
-    console.log(name);
+  
 
     // if (!isOwner) {
     //   console.log(`Folder "${folder.name}" (ID: ${folder.id}) - Perms:`, {
@@ -572,7 +617,7 @@ function FolderManager() {
       }
     });
   };
-  
+
   return (
     <div className="folder-manager">
       <div className="folder-manager-header">
@@ -667,34 +712,103 @@ function FolderManager() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Create New {createType === "folder" ? "Folder" : "File"}</h3>
 
-            <div className="form-group">
-              <label>Name:</label>
-              <input
-                type="text"
-                value={newItemName}
-                onChange={(e) => setNewItemName(e.target.value)}
-                placeholder={`Enter ${createType} name`}
-                autoFocus
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") handleCreateSubmit();
-                }}
-              />
-            </div>
+            {createType === "folder" ? (
+              <>
+                <div className="form-group">
+                  <label>Name:</label>
+                  <input
+                    type="text"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Enter folder name"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateSubmit();
+                    }}
+                  />
+                </div>
 
-            <div className="form-group">
-              <label>Type:</label>
-              <select
-                value={createType}
-                onChange={(e) => setCreateType(e.target.value)}
-              >
-                <option value="folder">Folder</option>
-                <option value="file">File</option>
-              </select>
-            </div>
+                <div className="form-group">
+                  <label>Type:</label>
+                  <select
+                    value={createType}
+                    onChange={(e) => setCreateType(e.target.value)}
+                  >
+                    <option value="folder">Folder</option>
+                    <option value="file">File</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                {fileUploadError && (
+                  <div className="alert alert-error">✗ {fileUploadError}</div>
+                )}
+
+                <div className="form-group">
+                  <label>Select File:</label>
+                  <input
+                    type="file"
+                    name="file"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setSelectedFile(e.target.files[0]);
+                        setFileUploadError(null);
+                        if (!customFileName && e.target.files[0].name) {
+                          setCustomFileName(e.target.files[0].name);
+                        }
+                      }
+                    }}
+                    accept="*/*"
+                  />
+                  {selectedFile && (
+                    <div style={{ marginTop: "10px", fontSize: "14px" }}>
+                      <p>
+                        <strong>Selected:</strong> {selectedFile.name} (
+                        {(selectedFile.size / 1024).toFixed(2)} KB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>File Name:</label>
+                  <input
+                    type="text"
+                    value={customFileName}
+                    onChange={(e) => {
+                      setCustomFileName(e.target.value);
+                      setFileUploadError(null);
+                    }}
+                    placeholder="Enter file name"
+                    autoFocus={selectedFile !== null}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateSubmit();
+                    }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Type:</label>
+                  <select
+                    value={createType}
+                    onChange={(e) => {
+                      setCreateType(e.target.value);
+                      setSelectedFile(null);
+                      setCustomFileName("");
+                      setFileUploadError(null);
+                    }}
+                  >
+                    <option value="folder">Folder</option>
+                    <option value="file">File</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             <div className="modal-actions">
               <button className="btn-primary" onClick={handleCreateSubmit}>
-                Create
+                {createType === "folder" ? "Create" : "Upload"}
               </button>
               <button
                 className="btn-secondary"
@@ -723,7 +837,7 @@ function FolderManager() {
                 onChange={(e) => setRenameNewName(e.target.value)}
                 placeholder="Enter new name"
                 autoFocus
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                   if (e.key === "Enter") handleRenameSubmit();
                 }}
               />

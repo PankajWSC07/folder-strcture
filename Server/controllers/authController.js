@@ -10,7 +10,6 @@ const generateToken = (id) => {
   });
 };
 
-// Create email transporter
 const createTransporter = () => {
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -27,7 +26,6 @@ exports.register = async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
-    // Validation
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -35,7 +33,6 @@ exports.register = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if user already exists
       const [existingUser] = await connection.execute(
         "SELECT id FROM Users WHERE email = ?",
         [email],
@@ -45,12 +42,12 @@ exports.register = async (req, res) => {
         return res.status(409).json({ message: "Email already registered" });
       }
 
-      // Hash password
+
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-      // Create new user
+      
       const [result] = await connection.execute(
         "INSERT INTO Users (firstName, lastName, email, password,  createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
         [firstName, lastName, email, hashedPassword, now, now],
@@ -58,7 +55,6 @@ exports.register = async (req, res) => {
 
       const userId = result.insertId;
 
-      // Generate token
       const token = generateToken(userId);
 
       res.status(201).json({
@@ -85,7 +81,6 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       return res
         .status(400)
@@ -95,7 +90,6 @@ exports.login = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Find user by email
       const [users] = await connection.execute(
         "SELECT * FROM Users WHERE email = ?",
         [email],
@@ -107,14 +101,12 @@ exports.login = async (req, res) => {
 
       const user = users[0];
 
-      // Compare password
       const isPasswordValid = await bcrypt.compare(password, user.password);
 
       if (!isPasswordValid) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // Generate token
       const token = generateToken(user.id);
 
       res.status(200).json({
@@ -179,7 +171,6 @@ exports.getAllUsers = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if current user is admin
       const [currentUserResult] = await connection.execute(
         "SELECT role FROM Users WHERE id = ?",
         [req.userId],
@@ -194,7 +185,6 @@ exports.getAllUsers = async (req, res) => {
           .json({ message: "Access denied. Admin role required." });
       }
 
-      // Get all users
       const [users] = await connection.execute(
         "SELECT id, firstName, lastName, email, role, createdAt FROM Users",
       );
@@ -218,12 +208,10 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-// Forgot Password
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Validation
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
@@ -231,7 +219,6 @@ exports.forgotPassword = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Find user by email
       const [users] = await connection.execute(
         "SELECT id, firstName, email FROM Users WHERE email = ?",
         [email],
@@ -245,14 +232,12 @@ exports.forgotPassword = async (req, res) => {
 
       const user = users[0];
 
-      // Generate reset token
       const resetToken = crypto.randomBytes(32).toString("hex");
       const resetTokenHash = crypto
         .createHash("sha256")
         .update(resetToken)
         .digest("hex");
 
-      // Set reset token and expiration in 30 minutes
       const resetExpire = new Date(Date.now() + 30 * 60 * 1000);
 
       await connection.execute(
@@ -260,18 +245,15 @@ exports.forgotPassword = async (req, res) => {
         [resetTokenHash, resetExpire, user.id],
       );
 
-      // Create reset URL
       const resetUrl = `${
         process.env.CLIENT_URL || "http://localhost:5173"
       }/reset-password/${resetToken}`;
 
-      // Send email
       try {
         const transporter = createTransporter();
 
-        // Test connection
         await transporter.verify();
-        console.log("✅ Email transporter verified successfully");
+        console.log("Email transporter verified successfully");
 
         const mailOptions = {
           from: process.env.EMAIL_USER,
@@ -290,15 +272,14 @@ exports.forgotPassword = async (req, res) => {
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log("✅ Email sent successfully:", info.response);
+        console.log(" Email sent successfully:", info.response);
 
         res.status(200).json({
           message:
             "Password reset link has been sent to your email. Please check your inbox.",
         });
       } catch (emailError) {
-        console.error("❌ Email send error:", emailError);
-        // Reset the token if email fails
+        console.error(" Email send error:", emailError);
         await connection.execute(
           "UPDATE Users SET resetPasswordToken = NULL, resetPasswordExpire = NULL WHERE id = ?",
           [user.id],
@@ -312,19 +293,17 @@ exports.forgotPassword = async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    console.error("❌ Forgot password error:", error);
+    console.error(" Forgot password error:", error);
     res
       .status(500)
       .json({ message: error.message || "Failed to process password reset" });
   }
 };
 
-// Reset Password
 exports.resetPassword = async (req, res) => {
   try {
     const { token, password, confirmPassword } = req.body;
 
-    // Validation
     if (!token || !password || !confirmPassword) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -339,7 +318,6 @@ exports.resetPassword = async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    // Hash the token to compare
     const resetTokenHash = crypto
       .createHash("sha256")
       .update(token)
@@ -348,7 +326,6 @@ exports.resetPassword = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Find user with valid reset token
       const [users] = await connection.execute(
         "SELECT id FROM Users WHERE resetPasswordToken = ? AND resetPasswordExpire > NOW()",
         [resetTokenHash],
@@ -362,11 +339,11 @@ exports.resetPassword = async (req, res) => {
 
       const user = users[0];
 
-      // Hash new password
+      
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Update password
+
       await connection.execute(
         "UPDATE Users SET password = ?, resetPasswordToken = NULL, resetPasswordExpire = NULL WHERE id = ?",
         [hashedPassword, user.id],
@@ -396,7 +373,6 @@ exports.updateUser = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if user exists
       const [users] = await connection.execute(
         "SELECT id FROM Users WHERE id = ?",
         [id],
@@ -406,7 +382,6 @@ exports.updateUser = async (req, res) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Build dynamic update query
       const updates = [];
       const values = [];
 
@@ -438,7 +413,6 @@ exports.updateUser = async (req, res) => {
       const query = `UPDATE Users SET ${updates.join(", ")} WHERE id = ?`;
       await connection.execute(query, values);
 
-      // Fetch updated user
       const [updatedUsers] = await connection.execute(
         "SELECT id, firstName, lastName, email, role FROM Users WHERE id = ?",
         [id],
@@ -473,7 +447,6 @@ exports.deleteUser = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      // Check if user exists
       const [users] = await connection.execute(
         "SELECT id FROM Users WHERE id = ?",
         [id],
@@ -483,7 +456,6 @@ exports.deleteUser = async (req, res) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Delete user
       await connection.execute("DELETE FROM Users WHERE id = ?", [id]);
 
       res.status(200).json({

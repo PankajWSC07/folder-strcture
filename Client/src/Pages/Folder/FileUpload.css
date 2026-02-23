@@ -1,9 +1,7 @@
-/* File Upload Container */
 .file-upload-container {
   position: relative;
 }
 
-/* File Upload Button */
 .action-icon-btn {
   background: linear-gradient(135deg, #4F46E5 0%, #3a6ded 100%);
   color: white;
@@ -38,7 +36,6 @@
   margin-left: 0.5rem;
 }
 
-/* Modal Overlay */
 .file-upload-modal-overlay {
   position: fixed;
   top: 0;
@@ -62,7 +59,6 @@
   }
 }
 
-/* Modal */
 .file-upload-modal {
   background: white;
   border-radius: 12px;
@@ -91,7 +87,6 @@
   }
 }
 
-/* Modal Header */
 .file-upload-modal-header {
   display: flex;
   justify-content: space-between;
@@ -133,12 +128,10 @@
   cursor: not-allowed;
 }
 
-/* Modal Content */
 .file-upload-modal-content {
   padding: 2rem;
 }
 
-/* Alert Messages */
 .alert {
   padding: 1rem;
   border-radius: 8px;
@@ -199,7 +192,6 @@
   background-color: #f0fdf4;
 }
 
-/* File Drop Content */
 .file-drop-content {
   width: 100%;
 }
@@ -249,7 +241,6 @@
   margin-top: 1rem;
 }
 
-/* File Preview */
 .file-preview {
   display: flex;
   align-items: center;
@@ -305,7 +296,6 @@
   cursor: not-allowed;
 }
 
-/* Progress Bar */
 .progress-container {
   margin: 2rem 0 1.5rem 0;
 }
@@ -333,7 +323,6 @@
   text-align: center;
 }
 
-/* Action Buttons */
 .file-upload-actions {
   display: flex;
   gap: 1rem;
@@ -404,7 +393,6 @@
   }
 }
 
-/* File List Container */
 .file-list-container {
   width: 100%;
   display: flex;

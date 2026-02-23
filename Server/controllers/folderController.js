@@ -388,11 +388,11 @@ exports.getItems = async (req, res) => {
             IF(i.userId = ?, 1, IFNULL(p.can_edit, 0))   AS can_edit,
             IF(i.userId = ?, 1, IFNULL(p.can_delete, 0)) AS can_delete,
 
-            NULL AS filePath, NULL AS originalName,
-            NULL AS size, NULL AS mimeType
+            f.filePath, f.originalName, f.size, f.mimeType
 
           FROM Items i
           JOIN Users u ON i.userId = u.id
+          LEFT JOIN Files f ON i.id = f.id
           LEFT JOIN Permissions p
             ON p.itemId = i.id AND p.userId = ?
 
@@ -404,37 +404,9 @@ exports.getItems = async (req, res) => {
           [userId, userId, userId, userId, userId, userId, userId],
         );
 
-        // const [rootFiles] = await connection.execute(
-        //   `
-        //   SELECT 
-        //     f.id, f.name, 'file' AS type, f.parentId, f.rootFolderId,
-        //     NULL AS extension, f.createdAt, f.userId,
-        //     u.firstName AS creatorName,
-
-        //     IF(f.userId = ?, 1, IFNULL(p.can_view, 0))   AS can_view,
-        //     IF(f.userId = ?, 1, IFNULL(p.can_create, 0)) AS can_create,
-        //     IF(f.userId = ?, 1, IFNULL(p.can_upload, 0)) AS can_upload,
-        //     IF(f.userId = ?, 1, IFNULL(p.can_edit, 0))   AS can_edit,
-        //     IF(f.userId = ?, 1, IFNULL(p.can_delete, 0)) AS can_delete,
-
-        //     f.filePath, f.originalName, f.size, f.mimeType
-
-        //   FROM Files f
-        //   JOIN Users u ON f.userId = u.id
-        //   LEFT JOIN Permissions p
-        //     ON p.fileId = f.id AND p.userId = ?
-
-        //   WHERE f.parentId IS NULL
-        //     AND (f.userId = ? OR p.can_view = 1)
-
-        //   ORDER BY f.name ASC
-        //   `,
-        //   [userId, userId, userId, userId, userId, userId, userId],
-        // );
-
         return res.status(200).json({
           message: "Root items retrieved successfully",
-          data: [...rootItems],
+          data: rootItems,
         });
       }
 
@@ -483,11 +455,11 @@ exports.getItems = async (req, res) => {
           IF(i.userId = ?, 1, IFNULL(rp.can_edit, 0))   AS can_edit,
           IF(i.userId = ?, 1, IFNULL(rp.can_delete, 0)) AS can_delete,
 
-          NULL AS filePath, NULL AS originalName,
-          NULL AS size, NULL AS mimeType
+          f.filePath, f.originalName, f.size, f.mimeType
 
         FROM Items i
         JOIN Users u ON i.userId = u.id
+        LEFT JOIN Files f ON i.id = f.id AND i.type = 'file'
 
         LEFT JOIN Permissions rp
           ON rp.itemId =
@@ -505,41 +477,7 @@ exports.getItems = async (req, res) => {
         [userId, userId, userId, userId, userId, userId, parentId],
       );
 
-      const [files] = await connection.execute(
-        `
-        SELECT 
-          f.id, f.name, 'file' AS type, f.parentId, f.rootFolderId,
-          NULL AS extension, f.createdAt, f.userId,
-          u.firstName AS creatorName,
-
-          IF(f.userId = ?, 1, IFNULL(rp.can_view, 0))   AS can_view,
-          IF(f.userId = ?, 1, IFNULL(rp.can_create, 0)) AS can_create,
-          IF(f.userId = ?, 1, IFNULL(rp.can_upload, 0)) AS can_upload,
-          IF(f.userId = ?, 1, IFNULL(rp.can_edit, 0))   AS can_edit,
-          IF(f.userId = ?, 1, IFNULL(rp.can_delete, 0)) AS can_delete,
-
-          f.filePath, f.originalName, f.size, f.mimeType
-
-        FROM Files f
-        JOIN Users u ON f.userId = u.id
-
-        LEFT JOIN Permissions rp
-          ON rp.itemId =
-            CASE
-              WHEN f.rootFolderId IS NULL OR f.rootFolderId = 0
-              THEN f.id
-              ELSE f.rootFolderId
-            END
-          AND rp.userId = ?
-
-        WHERE f.parentId = ?
-
-        ORDER BY f.name ASC
-        `,
-        [userId, userId, userId, userId, userId, userId, parentId],
-      );
-
-      const data = [...items, ...files].sort((a, b) => {
+      const data = items.sort((a, b) => {
         if (a.type === b.type) return a.name.localeCompare(b.name);
         return a.type === "folder" ? -1 : 1;
       });
@@ -603,6 +541,24 @@ exports.deleteItem = async (req, res) => {
           for (const child of children) {
             if (child.type === "folder") {
               await deleteChildren(child.id);
+            } else if (child.type === "file") {
+              const [fileData] = await connection.execute(
+                "SELECT filePath FROM Files WHERE id = ?",
+                [child.id],
+              );
+              if (fileData.length > 0) {
+                const uploadsDir = path.join(__dirname, "../Uploads");
+                const filePath = path.join(
+                  uploadsDir,
+                  path.basename(fileData[0].filePath),
+                );
+                if (fs.existsSync(filePath)) {
+                  fs.unlinkSync(filePath);
+                }
+              }
+              await connection.execute("DELETE FROM Files WHERE id = ?", [
+                child.id,
+              ]);
             }
             await connection.execute("DELETE FROM Items WHERE id = ?", [
               child.id,
@@ -631,6 +587,24 @@ exports.deleteItem = async (req, res) => {
         };
 
         await deleteChildren(itemId);
+
+        if (item.type === "file") {
+          const [fileData] = await connection.execute(
+            "SELECT filePath FROM Files WHERE id = ?",
+            [itemId],
+          );
+          if (fileData.length > 0) {
+            const uploadsDir = path.join(__dirname, "../Uploads");
+            const filePath = path.join(
+              uploadsDir,
+              path.basename(fileData[0].filePath),
+            );
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          }
+          await connection.execute("DELETE FROM Files WHERE id = ?", [itemId]);
+        }
 
         const [directFiles] = await connection.execute(
           "SELECT filePath FROM Files WHERE parentId = ?",
